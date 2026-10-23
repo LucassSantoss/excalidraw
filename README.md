@@ -1,3 +1,73 @@
+# Excalidraw Notes (fork)
+
+Fork do [Excalidraw](https://github.com/excalidraw/excalidraw) com uma **galeria de notas salva em SQLite** e um **app nativo para macOS**. Tudo roda localmente, sem conta, nuvem ou plano pago.
+
+- **Galeria de notas**: cria, busca, renomeia, duplica e exclui notas, com miniatura de cada desenho
+- **Salvamento automático** no SQLite enquanto você desenha, incluindo imagens coladas
+- **Biblioteca de formas** salva no mesmo banco e compartilhada entre as notas
+- **App para macOS** (Electron) que funciona offline
+
+## Pré-requisitos
+
+- [Node.js](https://nodejs.org) **24** ou mais novo (`node -v`)
+- [Yarn 1](https://classic.yarnpkg.com): `npm i -g yarn`
+- Mac com chip Apple (arm64), só para gerar o app de macOS
+
+## Instalação
+
+```bash
+git clone https://github.com/LucassSantoss/excalidraw.git
+cd excalidraw
+
+yarn install                  # dependências do Excalidraw
+yarn --cwd desktop install    # dependências do app de macOS (Electron)
+```
+
+> A pasta `desktop/` tem as dependências dela, separadas do resto do projeto. Por isso o segundo `install` é necessário.
+
+## Como rodar
+
+| Quero... | Comando | Resultado |
+| --- | --- | --- |
+| **Instalar o app no Mac** | `yarn desktop:package` | Gera `desktop/release/Excalidraw Notes-<versão>-arm64.dmg`. Abra e arraste para **Aplicativos**. |
+| Abrir o app sem instalar | `yarn desktop` | Abre a janela do app direto |
+| Usar no navegador (desenvolvimento) | `yarn start` | <http://localhost:3001>, recarrega ao editar o código |
+| Usar no navegador (versão final) | `yarn start:notes` | <http://localhost:5001> |
+
+O `yarn desktop:package` leva alguns minutos e, na primeira vez, baixa o Electron.
+
+> O app é assinado só localmente (_ad-hoc_), sem certificado de desenvolvedor da Apple. No Mac onde foi gerado, ele abre normalmente. Em outro Mac, na primeira vez, clique com o botão direito no app e escolha **Abrir**.
+
+## Onde ficam as notas
+
+As notas **não vão para o repositório**: o banco está no `.gitignore`. Cada modo usa o próprio arquivo SQLite:
+
+| Modo | Banco de dados |
+| --- | --- |
+| App de macOS | `~/Library/Application Support/Excalidraw Notes/notes.db` |
+| Navegador (`yarn start` / `yarn start:notes`) | `data/notes.db` (na raiz do repositório) |
+
+Para fazer **backup** ou levar as notas para outro Mac, copie o arquivo `notes.db`, de preferência com o app fechado. Para usar outro arquivo, defina a variável `NOTES_DB_PATH`.
+
+## Onde está o código
+
+| Pasta | Conteúdo |
+| --- | --- |
+| `excalidraw-app/notes/` | Galeria, editor com salvamento automático e biblioteca no SQLite (React) |
+| `excalidraw-app/notes-server/` | API local (`/api/notes`, `/api/library`) com o SQLite embutido do Node (`node:sqlite`) |
+| `desktop/` | App de macOS (Electron), que roda a API dentro do próprio app |
+
+Links antigos do excalidraw.com (`#json=…`, `#room=…`) ainda abrem o app original do Excalidraw.
+
+## Atualizar com o Excalidraw oficial
+
+```bash
+git fetch upstream            # upstream = github.com/excalidraw/excalidraw
+git merge upstream/master
+```
+
+---
+
 <a href="https://excalidraw.com/" target="_blank" rel="noopener">
   <picture>
     <source media="(prefers-color-scheme: dark)" alt="Excalidraw" srcset="https://excalidraw.nyc3.cdn.digitaloceanspaces.com/github/excalidraw_github_cover_2_dark.png" />
