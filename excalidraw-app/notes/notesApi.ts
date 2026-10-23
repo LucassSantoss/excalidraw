@@ -8,6 +8,8 @@ export type NoteSummary = {
   id: string;
   title: string;
   folderId: string | null;
+  /** created by "Nota de hoje"; the only notes allowed in "Notas Diárias" */
+  isDaily: boolean;
   createdAt: number;
   updatedAt: number;
   hasThumbnail: boolean;

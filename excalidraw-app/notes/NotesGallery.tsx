@@ -17,6 +17,7 @@ import {
   folderPlusIcon,
 } from "./icons";
 import { foldersApi, notesApi } from "./notesApi";
+import { usePromptDialog } from "./PromptDialog";
 
 import "./NotesGallery.scss";
 
@@ -29,7 +30,7 @@ const NOTE_DRAG_TYPE = "application/x-excalidraw-note";
 /** drop target key of the root ("Minhas notas") */
 const ROOT_DROP_TARGET = "root";
 
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
+const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
   dateStyle: "short",
   timeStyle: "short",
 });
@@ -60,6 +61,10 @@ const pluralizeNotes = (count: number) =>
 
 const isNoteDrag = (event: React.DragEvent) =>
   event.dataTransfer.types.includes(NOTE_DRAG_TYPE);
+
+/** the daily notes folder only holds daily notes */
+const canMoveNoteTo = (note: NoteSummary, folder: Folder | null) =>
+  folder?.kind !== "daily" || note.isDaily;
 
 const NoteCard = ({
   note,
@@ -169,6 +174,7 @@ export const NotesGallery = ({
   const [query, setQuery] = useState("");
   const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const { prompt, confirm, dialog } = usePromptDialog();
 
   const refresh = useCallback(
     () =>
@@ -215,22 +221,39 @@ export const NotesGallery = ({
       .catch((error) => setError(error.message));
   };
 
-  const renameNote = (note: NoteSummary) => {
-    const title = window.prompt("Nome da nota", note.title);
+  const renameNote = async (note: NoteSummary) => {
+    const title = await prompt({
+      title: "Renomear nota",
+      confirmLabel: "Renomear",
+      defaultValue: note.title,
+      placeholder: UNTITLED,
+    });
     if (title !== null && title !== note.title) {
       run(() => notesApi.update(note.id, { title }));
     }
   };
 
-  const deleteNote = (note: NoteSummary) => {
-    if (window.confirm(`Excluir "${note.title || UNTITLED}"?`)) {
+  const deleteNote = async (note: NoteSummary) => {
+    const confirmed = await confirm({
+      title: `Excluir "${note.title || UNTITLED}"?`,
+      message: "Essa ação não pode ser desfeita.",
+      confirmLabel: "Excluir",
+      danger: true,
+    });
+    if (confirmed) {
       run(() => notesApi.remove(note.id));
     }
   };
 
   const moveNote = (noteId: string, targetFolderId: string | null) => {
     const note = notes?.find((note) => note.id === noteId);
-    if (!note || note.folderId === targetFolderId) {
+    const targetFolder =
+      folders.find((folder) => folder.id === targetFolderId) ?? null;
+    if (
+      !note ||
+      note.folderId === targetFolderId ||
+      !canMoveNoteTo(note, targetFolder)
+    ) {
       return;
     }
     // optimistic, so the card leaves the current view right away
@@ -243,27 +266,41 @@ export const NotesGallery = ({
     run(() => notesApi.move(noteId, targetFolderId));
   };
 
-  const createFolder = () => {
-    const name = window.prompt("Nome da nova pasta");
-    if (name?.trim()) {
+  const createFolder = async () => {
+    const name = await prompt({
+      title: "Nova pasta",
+      confirmLabel: "Criar pasta",
+      placeholder: "Nome da pasta",
+    });
+    if (name) {
       run(() => foldersApi.create(name));
     }
   };
 
-  const renameFolder = (folder: Folder) => {
-    const name = window.prompt("Nome da pasta", folder.name);
-    if (name?.trim() && name !== folder.name) {
+  const renameFolder = async (folder: Folder) => {
+    const name = await prompt({
+      title: "Renomear pasta",
+      confirmLabel: "Renomear",
+      defaultValue: folder.name,
+      placeholder: "Nome da pasta",
+    });
+    if (name && name !== folder.name) {
       run(() => foldersApi.rename(folder.id, name));
     }
   };
 
-  const deleteFolder = (folder: Folder) => {
-    const notesWarning = folder.noteCount
-      ? ` ${pluralizeNotes(folder.noteCount)} dentro dela ${
-          folder.noteCount === 1 ? "volta" : "voltam"
-        } para "Minhas notas".`
-      : "";
-    if (window.confirm(`Excluir a pasta "${folder.name}"?${notesWarning}`)) {
+  const deleteFolder = async (folder: Folder) => {
+    const confirmed = await confirm({
+      title: `Excluir a pasta "${folder.name}"?`,
+      message: folder.noteCount
+        ? `${pluralizeNotes(folder.noteCount)} dentro dela ${
+            folder.noteCount === 1 ? "volta" : "voltam"
+          } para "Minhas notas". Nenhuma nota é apagada.`
+        : "A pasta está vazia.",
+      confirmLabel: "Excluir pasta",
+      danger: true,
+    });
+    if (confirmed) {
       if (folder.id === currentFolderId) {
         onOpenFolder(null);
       }
@@ -272,11 +309,20 @@ export const NotesGallery = ({
   };
 
   /** props making an element a drop target for moving notes into a folder */
+  const draggedNote = notes?.find((note) => note.id === draggedNoteId);
+
+  /** whether the note being dragged can't be dropped into `folder` */
+  const isDropDisabled = (folder: Folder | null) =>
+    !!draggedNote && !canMoveNoteTo(draggedNote, folder);
+
   const dropTargetProps = (targetFolderId: string | null) => {
     const key = targetFolderId ?? ROOT_DROP_TARGET;
+    const targetFolder =
+      folders.find((folder) => folder.id === targetFolderId) ?? null;
     return {
       onDragOver: (event: React.DragEvent) => {
-        if (isNoteDrag(event)) {
+        // not accepting the drop shows the "not allowed" cursor
+        if (isNoteDrag(event) && !isDropDisabled(targetFolder)) {
           event.preventDefault();
           event.dataTransfer.dropEffect = "move";
           setDropTarget(key);
@@ -400,14 +446,16 @@ export const NotesGallery = ({
             Nova pasta
           </button>
         )}
-        <button
-          type="button"
-          className="notes-gallery__create"
-          onClick={createNote}
-        >
-          {PlusIcon}
-          Nova nota
-        </button>
+        {currentFolder?.kind !== "daily" && (
+          <button
+            type="button"
+            className="notes-gallery__create"
+            onClick={createNote}
+          >
+            {PlusIcon}
+            Nova nota
+          </button>
+        )}
       </header>
 
       {error && <p className="notes-gallery__error">{error}</p>}
@@ -436,7 +484,14 @@ export const NotesGallery = ({
                 className={clsx("notes-gallery__folder", {
                   "notes-gallery__folder--drop-target":
                     dropTarget === folder.id,
+                  "notes-gallery__folder--drop-disabled":
+                    isDropDisabled(folder),
                 })}
+                title={
+                  isDropDisabled(folder)
+                    ? 'Só notas criadas por "Nota de hoje" ficam nesta pasta'
+                    : undefined
+                }
                 {...dropTargetProps(folder.id)}
               >
                 <button
@@ -522,6 +577,8 @@ export const NotesGallery = ({
           />
         ))}
       </ul>
+
+      {dialog}
     </div>
   );
 };

@@ -4,7 +4,7 @@ Fork do [Excalidraw](https://github.com/excalidraw/excalidraw) com uma **galeria
 
 - **Galeria de notas**: cria, busca, renomeia, duplica e exclui notas, com miniatura de cada desenho
 - **Pastas**: crie pastas e arraste as notas para dentro delas. Para tirar uma nota da pasta, arraste até "Minhas notas". Excluir uma pasta não apaga as notas; elas voltam para a raiz
-- **Nota diária**: o botão "Nota de hoje" cria (ou reabre) a nota do dia, com um título como "Sexta-feira, 23 de outubro de 2026", na pasta fixa **Notas Diárias**
+- **Nota diária**: o botão "Nota de hoje" cria (ou reabre) a nota do dia, com um título como "Sexta-feira, 23 de outubro de 2026", na pasta fixa **Notas Diárias**. Essa pasta só aceita notas diárias; as outras notas ficam nas demais pastas
 - **Salvamento automático** no SQLite enquanto você desenha, incluindo imagens coladas
 - **Biblioteca de formas** salva no mesmo banco e compartilhada entre as notas
 - **App para macOS** (Electron) que funciona offline

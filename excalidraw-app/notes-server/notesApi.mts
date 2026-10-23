@@ -26,6 +26,7 @@ type NoteRow = {
   id: string;
   title: string;
   folder_id: string | null;
+  daily_date: string | null;
   elements: string;
   app_state: string;
   created_at: number;
@@ -122,6 +123,13 @@ const openDatabase = (dbFile: string) => {
     CREATE UNIQUE INDEX IF NOT EXISTS notes_daily_date ON notes (daily_date)
       WHERE daily_date IS NOT NULL;
   `);
+  // the daily notes folder only holds daily notes (older versions allowed
+  // any note in it): move others back to the root
+  db.prepare(
+    `UPDATE notes SET folder_id = NULL
+     WHERE daily_date IS NULL
+       AND folder_id IN (SELECT id FROM folders WHERE kind = ?)`,
+  ).run(DAILY_FOLDER_KIND);
   return db;
 };
 
@@ -129,6 +137,7 @@ const toNoteSummary = (row: NoteRow) => ({
   id: row.id,
   title: row.title,
   folderId: row.folder_id,
+  isDaily: !!row.daily_date,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
   hasThumbnail: !!row.has_thumbnail,
@@ -188,7 +197,7 @@ const sendJSON = (res: ServerResponse, status: number, body: unknown) => {
 export const createNotesApi = (dbFile: string) => {
   const db = openDatabase(dbFile);
 
-  const SUMMARY_COLUMNS = `id, title, folder_id, created_at, updated_at,
+  const SUMMARY_COLUMNS = `id, title, folder_id, daily_date, created_at, updated_at,
     thumbnail IS NOT NULL AS has_thumbnail`;
 
   const listNotes = db.prepare(
@@ -259,15 +268,25 @@ export const createNotesApi = (dbFile: string) => {
     return row;
   };
 
-  /** validates a client-supplied folder id (`null`: no folder) */
-  const parseFolderId = (folderId: unknown) => {
+  /**
+   * validates a client-supplied folder id (`null`: no folder) for a note,
+   * daily or not: the daily notes folder only accepts daily notes
+   */
+  const parseFolderId = (folderId: unknown, isDailyNote: boolean) => {
     if (folderId === null || folderId === undefined || folderId === "") {
       return null;
     }
-    if (typeof folderId !== "string" || !getFolder.get(folderId)) {
+    const folder =
+      typeof folderId === "string"
+        ? (getFolder.get(folderId) as FolderRow | undefined)
+        : undefined;
+    if (!folder) {
       throw new HttpError(400, "folder not found");
     }
-    return folderId;
+    if (folder.kind === DAILY_FOLDER_KIND && !isDailyNote) {
+      throw new HttpError(403, "only daily notes can be in this folder");
+    }
+    return folder.id;
   };
 
   const assertEditableFolder = (row: FolderRow) => {
@@ -348,6 +367,8 @@ export const createNotesApi = (dbFile: string) => {
 
   const duplicateNote = (sourceId: string) => {
     const source = findNote(sourceId);
+    // a copy isn't a daily note, so it can't stay in the daily notes folder
+    const folderId = source.daily_date ? null : source.folder_id;
     const id = randomUUID();
     const now = Date.now();
     transaction(() => {
@@ -360,7 +381,7 @@ export const createNotesApi = (dbFile: string) => {
         source.elements,
         source.app_state,
         thumbnail.thumbnail,
-        source.folder_id,
+        folderId,
         null,
         now,
         now,
@@ -373,10 +394,10 @@ export const createNotesApi = (dbFile: string) => {
   };
 
   const updateNote = (id: string, update: NoteUpdate) => {
-    findNote(id);
+    const note = findNote(id);
     const folderId =
       update.folderId !== undefined
-        ? parseFolderId(update.folderId)
+        ? parseFolderId(update.folderId, !!note.daily_date)
         : undefined;
 
     const assignments: string[] = [];
@@ -523,7 +544,10 @@ export const createNotesApi = (dbFile: string) => {
         return sendJSON(
           res,
           201,
-          createNote(String(body.title ?? ""), parseFolderId(body.folderId)),
+          createNote(
+            String(body.title ?? ""),
+            parseFolderId(body.folderId, false),
+          ),
         );
       }
     } else if (!action) {
