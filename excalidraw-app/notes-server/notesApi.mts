@@ -1,8 +1,8 @@
 /**
  * Local notes storage backed by SQLite (Node's built-in `node:sqlite`).
  *
- * Exposes a connect-style middleware handling `/api/notes/*` and
- * `/api/library` (the editor's shape library, shared by all notes), used by
+ * Exposes a connect-style middleware handling `/api/notes/*`, `/api/folders/*`
+ * and `/api/library` (the editor's shape library, shared by all notes), used by
  * the Vite dev server (see `vite.config.mts`), the standalone production
  * server (`server.mts`) and the macOS app (`desktop/`).
  *
@@ -19,9 +19,13 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 const MAX_BODY_SIZE = 200 * 1024 * 1024; // 200MB (scenes with images)
 
+const DAILY_FOLDER_KIND = "daily";
+const DAILY_FOLDER_NAME = "Notas Diárias";
+
 type NoteRow = {
   id: string;
   title: string;
+  folder_id: string | null;
   elements: string;
   app_state: string;
   created_at: number;
@@ -31,8 +35,18 @@ type NoteRow = {
 
 type FileRow = { id: string; data: string };
 
+type FolderRow = {
+  id: string;
+  name: string;
+  kind: string | null;
+  created_at: number;
+  note_count: number;
+};
+
 type NoteUpdate = {
   title?: string;
+  /** moves the note (`null`: out of any folder); doesn't bump `updatedAt` */
+  folderId?: string | null;
   elements?: unknown[];
   appState?: Record<string, unknown>;
   files?: Record<string, { id: string }>;
@@ -78,6 +92,35 @@ const openDatabase = (dbFile: string) => {
       data       TEXT NOT NULL,
       updated_at INTEGER NOT NULL
     );
+
+    -- single level of folders; \`kind\` marks app-managed folders (e.g. the
+    -- daily notes one), which can't be renamed or deleted
+    CREATE TABLE IF NOT EXISTS folders (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      kind       TEXT UNIQUE,
+      created_at INTEGER NOT NULL
+    );
+  `);
+
+  // migrate databases created before folders existed
+  const noteColumns = new Set(
+    (db.prepare("PRAGMA table_info(notes)").all() as { name: string }[]).map(
+      (column) => column.name,
+    ),
+  );
+  if (!noteColumns.has("folder_id")) {
+    db.exec(`ALTER TABLE notes ADD COLUMN folder_id TEXT
+      REFERENCES folders(id) ON DELETE SET NULL`);
+  }
+  if (!noteColumns.has("daily_date")) {
+    // YYYY-MM-DD of daily notes, so each day has a single one
+    db.exec(`ALTER TABLE notes ADD COLUMN daily_date TEXT`);
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS notes_folder_id ON notes (folder_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS notes_daily_date ON notes (daily_date)
+      WHERE daily_date IS NOT NULL;
   `);
   return db;
 };
@@ -85,10 +128,27 @@ const openDatabase = (dbFile: string) => {
 const toNoteSummary = (row: NoteRow) => ({
   id: row.id,
   title: row.title,
+  folderId: row.folder_id,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
   hasThumbnail: !!row.has_thumbnail,
 });
+
+const toFolder = (row: FolderRow) => ({
+  id: row.id,
+  name: row.name,
+  kind: row.kind,
+  createdAt: row.created_at,
+  noteCount: row.note_count,
+});
+
+const parseFolderName = (name: unknown) => {
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  if (!trimmed) {
+    throw new HttpError(400, "folder name is required");
+  }
+  return trimmed;
+};
 
 const decodeDataURL = (dataURL: string) => {
   const match = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(dataURL);
@@ -128,7 +188,7 @@ const sendJSON = (res: ServerResponse, status: number, body: unknown) => {
 export const createNotesApi = (dbFile: string) => {
   const db = openDatabase(dbFile);
 
-  const SUMMARY_COLUMNS = `id, title, created_at, updated_at,
+  const SUMMARY_COLUMNS = `id, title, folder_id, created_at, updated_at,
     thumbnail IS NOT NULL AS has_thumbnail`;
 
   const listNotes = db.prepare(
@@ -143,8 +203,13 @@ export const createNotesApi = (dbFile: string) => {
   );
   const getFileIds = db.prepare(`SELECT id FROM note_files WHERE note_id = ?`);
   const insertNote = db.prepare(
-    `INSERT INTO notes (id, title, elements, app_state, thumbnail, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO notes (id, title, elements, app_state, thumbnail, folder_id,
+       daily_date, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const moveNote = db.prepare(`UPDATE notes SET folder_id = ? WHERE id = ?`);
+  const getDailyNoteId = db.prepare(
+    `SELECT id FROM notes WHERE daily_date = ?`,
   );
   const upsertFile = db.prepare(
     `INSERT OR IGNORE INTO note_files (note_id, id, data) VALUES (?, ?, ?)`,
@@ -153,6 +218,24 @@ export const createNotesApi = (dbFile: string) => {
     `DELETE FROM note_files WHERE note_id = ? AND id = ?`,
   );
   const deleteNote = db.prepare(`DELETE FROM notes WHERE id = ?`);
+  const listFolders = db.prepare(
+    `SELECT f.id, f.name, f.kind, f.created_at, COUNT(n.id) AS note_count
+     FROM folders f LEFT JOIN notes n ON n.folder_id = f.id
+     GROUP BY f.id
+     -- app-managed folders first, then alphabetically
+     ORDER BY f.kind IS NULL, f.name COLLATE NOCASE`,
+  );
+  const getFolder = db.prepare(
+    `SELECT f.id, f.name, f.kind, f.created_at,
+       (SELECT COUNT(*) FROM notes n WHERE n.folder_id = f.id) AS note_count
+     FROM folders f WHERE f.id = ?`,
+  );
+  const getFolderIdByKind = db.prepare(`SELECT id FROM folders WHERE kind = ?`);
+  const insertFolder = db.prepare(
+    `INSERT INTO folders (id, name, kind, created_at) VALUES (?, ?, ?, ?)`,
+  );
+  const renameFolder = db.prepare(`UPDATE folders SET name = ? WHERE id = ?`);
+  const deleteFolder = db.prepare(`DELETE FROM folders WHERE id = ?`);
   const getLibrary = db.prepare(`SELECT data FROM library WHERE id = 1`);
   const saveLibrary = db.prepare(
     `INSERT INTO library (id, data, updated_at) VALUES (1, ?, ?)
@@ -166,6 +249,31 @@ export const createNotesApi = (dbFile: string) => {
       throw new HttpError(404, "note not found");
     }
     return row;
+  };
+
+  const findFolder = (id: string) => {
+    const row = getFolder.get(id) as FolderRow | undefined;
+    if (!row) {
+      throw new HttpError(404, "folder not found");
+    }
+    return row;
+  };
+
+  /** validates a client-supplied folder id (`null`: no folder) */
+  const parseFolderId = (folderId: unknown) => {
+    if (folderId === null || folderId === undefined || folderId === "") {
+      return null;
+    }
+    if (typeof folderId !== "string" || !getFolder.get(folderId)) {
+      throw new HttpError(400, "folder not found");
+    }
+    return folderId;
+  };
+
+  const assertEditableFolder = (row: FolderRow) => {
+    if (row.kind) {
+      throw new HttpError(403, "this folder can't be renamed or deleted");
+    }
   };
 
   const transaction = (fn: () => void) => {
@@ -193,11 +301,49 @@ export const createNotesApi = (dbFile: string) => {
     };
   };
 
-  const createNote = (title: string) => {
+  const createNote = (title: string, folderId: string | null) => {
     const id = randomUUID();
     const now = Date.now();
-    insertNote.run(id, title, "[]", "{}", null, now, now);
+    insertNote.run(id, title, "[]", "{}", null, folderId, null, now, now);
     return toNoteSummary(findNote(id));
+  };
+
+  const createFolder = (name: string, kind: string | null = null) => {
+    const id = randomUUID();
+    insertFolder.run(id, name, kind, Date.now());
+    return toFolder(findFolder(id));
+  };
+
+  /** the note of the given day, created in the daily notes folder if needed */
+  const getOrCreateDailyNote = (date: unknown, title: unknown) => {
+    if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new HttpError(400, "date must be YYYY-MM-DD");
+    }
+    let noteId = (getDailyNoteId.get(date) as { id: string } | undefined)?.id;
+    if (!noteId) {
+      transaction(() => {
+        const folderId =
+          (
+            getFolderIdByKind.get(DAILY_FOLDER_KIND) as
+              | { id: string }
+              | undefined
+          )?.id ?? createFolder(DAILY_FOLDER_NAME, DAILY_FOLDER_KIND).id;
+        noteId = randomUUID();
+        const now = Date.now();
+        insertNote.run(
+          noteId,
+          typeof title === "string" && title.trim() ? title.trim() : date,
+          "[]",
+          "{}",
+          null,
+          folderId,
+          date,
+          now,
+          now,
+        );
+      });
+    }
+    return toNoteSummary(findNote(noteId!));
   };
 
   const duplicateNote = (sourceId: string) => {
@@ -214,6 +360,8 @@ export const createNotesApi = (dbFile: string) => {
         source.elements,
         source.app_state,
         thumbnail.thumbnail,
+        source.folder_id,
+        null,
         now,
         now,
       );
@@ -226,6 +374,10 @@ export const createNotesApi = (dbFile: string) => {
 
   const updateNote = (id: string, update: NoteUpdate) => {
     findNote(id);
+    const folderId =
+      update.folderId !== undefined
+        ? parseFolderId(update.folderId)
+        : undefined;
 
     const assignments: string[] = [];
     const values: (string | number | Uint8Array | null)[] = [];
@@ -251,6 +403,9 @@ export const createNotesApi = (dbFile: string) => {
     }
 
     transaction(() => {
+      if (folderId !== undefined) {
+        moveNote.run(folderId, id);
+      }
       if (assignments.length) {
         db.prepare(
           `UPDATE notes SET ${assignments.join(", ")}, updated_at = ?
@@ -298,6 +453,43 @@ export const createNotesApi = (dbFile: string) => {
     throw new HttpError(405, "method not allowed");
   };
 
+  const routeFolders = async (
+    req: IncomingMessage,
+    res: ServerResponse,
+    id: string | undefined,
+  ) => {
+    const method = req.method ?? "GET";
+    if (!id) {
+      if (method === "GET") {
+        return sendJSON(
+          res,
+          200,
+          (listFolders.all() as FolderRow[]).map(toFolder),
+        );
+      }
+      if (method === "POST") {
+        const body = await readJSONBody(req);
+        return sendJSON(res, 201, createFolder(parseFolderName(body.name)));
+      }
+    } else {
+      const folder = findFolder(id);
+      if (method === "PUT") {
+        assertEditableFolder(folder);
+        const body = await readJSONBody(req);
+        renameFolder.run(parseFolderName(body.name), id);
+        return sendJSON(res, 200, toFolder(findFolder(id)));
+      }
+      if (method === "DELETE") {
+        assertEditableFolder(folder);
+        // notes inside move back to the root (ON DELETE SET NULL)
+        deleteFolder.run(id);
+        res.statusCode = 204;
+        return res.end();
+      }
+    }
+    throw new HttpError(405, "method not allowed");
+  };
+
   const route = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const [, , resource, id, action] = url.pathname.split("/");
@@ -306,8 +498,16 @@ export const createNotesApi = (dbFile: string) => {
     if (resource === "library" && !id) {
       return routeLibrary(req, res);
     }
+    if (resource === "folders" && !action) {
+      return routeFolders(req, res, id);
+    }
     if (resource !== "notes") {
       throw new HttpError(404, "not found");
+    }
+
+    if (id === "daily" && !action && method === "POST") {
+      const body = await readJSONBody(req);
+      return sendJSON(res, 200, getOrCreateDailyNote(body.date, body.title));
     }
 
     if (!id) {
@@ -320,7 +520,11 @@ export const createNotesApi = (dbFile: string) => {
       }
       if (method === "POST") {
         const body = await readJSONBody(req);
-        return sendJSON(res, 201, createNote(String(body.title ?? "")));
+        return sendJSON(
+          res,
+          201,
+          createNote(String(body.title ?? ""), parseFolderId(body.folderId)),
+        );
       }
     } else if (!action) {
       if (method === "GET") {
@@ -353,7 +557,7 @@ export const createNotesApi = (dbFile: string) => {
   };
 
   return (req: IncomingMessage, res: ServerResponse, next: () => void) => {
-    if (!/^\/api\/(notes|library)(\/|\?|$)/.test(req.url ?? "")) {
+    if (!/^\/api\/(notes|folders|library)(\/|\?|$)/.test(req.url ?? "")) {
       return next();
     }
     route(req, res).catch((error) => {
