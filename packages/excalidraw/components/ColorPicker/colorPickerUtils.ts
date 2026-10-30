@@ -35,6 +35,30 @@ export const getColorNameAndShadeFromColor = ({
   return null;
 };
 
+/**
+ * the built-in top picks with the host's per-position defaults applied.
+ * A built-in pick whose color a default already shows elsewhere is replaced
+ * by the built-in color that default displaced, so no color is shown twice.
+ */
+export const applyTopPicksDefaults = (
+  builtInPicks: readonly string[],
+  defaults: readonly (string | null)[] | undefined,
+): readonly string[] => {
+  if (!defaults?.some(Boolean)) {
+    return builtInPicks;
+  }
+  const fromDefaults = new Set(defaults.filter(Boolean));
+  const picks = builtInPicks.map(
+    (color, index) =>
+      defaults[index] || (fromDefaults.has(color) ? null : color),
+  );
+  const used = new Set(picks);
+  const leftover = builtInPicks.filter((color) => !used.has(color));
+  return picks.map(
+    (pick, index) => pick ?? leftover.shift() ?? builtInPicks[index],
+  );
+};
+
 export const colorPickerHotkeyBindings = [
   ["q", "w", "e", "r", "t"],
   ["a", "s", "d", "f", "g"],

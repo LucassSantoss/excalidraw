@@ -21,6 +21,8 @@ import type { ExcalidrawElement } from "@excalidraw/element/types";
 import type {
   AppState,
   BinaryFiles,
+  ColorTopPicksDefaults,
+  ColorTopPicksSlot,
   ExcalidrawInitialDataState,
 } from "@excalidraw/excalidraw/types";
 
@@ -32,7 +34,7 @@ import {
   IndexedDBLibraryMigrationAdapter,
   SQLiteLibraryAdapter,
 } from "./libraryAdapters";
-import { notesApi } from "./notesApi";
+import { colorDefaultsApi, notesApi } from "./notesApi";
 
 import "./NoteEditor.scss";
 
@@ -195,6 +197,45 @@ const useNoteSaver = (noteId: string) => {
   return { status, onChange, onLoaded, flush: save };
 };
 
+/**
+ * default colors of the color pickers' top picks, stored in SQLite and shared
+ * by all notes. `null` while loading: the editor waits for them, since its
+ * memoized color pickers don't pick up later changes on their own.
+ */
+const useColorTopPicksDefaults = () => {
+  const [defaults, setDefaults] = useState<ColorTopPicksDefaults | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    colorDefaultsApi
+      .load()
+      .catch((error) => {
+        console.error("Failed to load default colors", error);
+        return {};
+      })
+      .then((loaded) => {
+        if (!cancelled) {
+          setDefaults(loaded);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onChange = useCallback(
+    (slot: ColorTopPicksSlot, slotDefaults: readonly (string | null)[]) => {
+      setDefaults((current) => ({ ...current, [slot]: slotDefaults }));
+      colorDefaultsApi.save(slot, slotDefaults).catch((error) => {
+        console.error("Failed to save default colors", error);
+      });
+    },
+    [],
+  );
+
+  return { defaults, onChange };
+};
+
 export const NoteEditor = ({
   noteId,
   onClose,
@@ -208,6 +249,7 @@ export const NoteEditor = ({
   const [title, setTitle] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const saver = useNoteSaver(noteId);
+  const colorDefaults = useColorTopPicksDefaults();
 
   useHandleLibrary({
     excalidrawAPI,
@@ -262,11 +304,17 @@ export const NoteEditor = ({
     );
   }
 
+  if (!colorDefaults.defaults) {
+    return null;
+  }
+
   return (
     <div style={{ height: "100%" }} className="excalidraw-app note-editor">
       <Excalidraw
         initialData={initialData}
         onChange={saver.onChange}
+        colorTopPicksDefaults={colorDefaults.defaults}
+        onColorTopPicksDefaultsChange={colorDefaults.onChange}
         name={title || "Sem título"}
         langCode={langCode}
         theme={editorTheme}

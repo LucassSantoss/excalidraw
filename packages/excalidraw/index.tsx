@@ -101,6 +101,8 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
     autoFocus = false,
     generateIdForFile,
     onLinkOpen,
+    colorTopPicksDefaults,
+    onColorTopPicksDefaultsChange,
     generateLinkForSelection,
     onPointerDown,
     onPointerUp,
@@ -245,6 +247,8 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
           autoFocus={autoFocus}
           generateIdForFile={generateIdForFile}
           onLinkOpen={onLinkOpen}
+          colorTopPicksDefaults={colorTopPicksDefaults}
+          onColorTopPicksDefaultsChange={onColorTopPicksDefaultsChange}
           generateLinkForSelection={generateLinkForSelection}
           onPointerDown={onPointerDown}
           onPointerUp={onPointerUp}
@@ -498,6 +502,8 @@ export type {
   ViewportStatusFrame,
   ElementRenderOverride,
   ElementRenderOverrides,
+  ColorTopPicksDefaults,
+  ColorTopPicksSlot,
 } from "./types";
 
 export { zoomToFitBounds, DEFAULT_OVERSCROLL } from "./viewport";

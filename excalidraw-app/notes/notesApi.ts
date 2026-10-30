@@ -1,6 +1,11 @@
 import type { ExcalidrawElement } from "@excalidraw/element/types";
 import type { LibraryPersistedData } from "@excalidraw/excalidraw/data/library";
-import type { AppState, BinaryFiles } from "@excalidraw/excalidraw/types";
+import type {
+  AppState,
+  BinaryFiles,
+  ColorTopPicksDefaults,
+  ColorTopPicksSlot,
+} from "@excalidraw/excalidraw/types";
 
 const API_URL = "/api";
 
@@ -107,4 +112,15 @@ export const libraryApi = {
   load: () => request<LibraryPersistedData | null>("/library"),
   save: (data: LibraryPersistedData) =>
     request<void>("/library", { method: "PUT", body: JSON.stringify(data) }),
+};
+
+/** default colors of the color pickers' top picks, shared by all notes */
+export const colorDefaultsApi = {
+  load: () => request<ColorTopPicksDefaults>("/color-defaults"),
+  /** replaces the slot's defaults (`null`: built-in color); returns all */
+  save: (slot: ColorTopPicksSlot, defaults: readonly (string | null)[]) =>
+    request<ColorTopPicksDefaults>(`/color-defaults/${slot}`, {
+      method: "PUT",
+      body: JSON.stringify({ defaults }),
+    }),
 };
