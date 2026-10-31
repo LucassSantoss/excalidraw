@@ -34,7 +34,10 @@ import { ColorInput } from "./ColorInput";
 import { Picker } from "./Picker";
 import PickerHeading from "./PickerHeading";
 import { TopPicks } from "./TopPicks";
-import { activeColorPickerSectionAtom } from "./colorPickerUtils";
+import {
+  activeColorPickerSectionAtom,
+  applyTopPicksDefaults,
+} from "./colorPickerUtils";
 import {
   ColorPickerDnDContext,
   useColorPickerDnD,
@@ -367,6 +370,8 @@ const ColorPickerComponent = ({
   const stylesPanelMode = useStylesPanelMode();
   const isCompactMode = stylesPanelMode !== "full";
 
+  const app = useApp();
+
   const isTopPicksCustomizable = !!customizableTopPicks && !isCompactMode;
 
   // user-pinned picks trump the (host-provided or default) baseline
@@ -375,14 +380,51 @@ const ColorPickerComponent = ({
       ? appState.colorTopPicks?.[customizableTopPicks]
       : null;
 
+  const builtInTopPicks =
+    topPicks ??
+    (type === "elementStroke"
+      ? DEFAULT_ELEMENT_STROKE_PICKS
+      : DEFAULT_ELEMENT_BACKGROUND_PICKS);
+
+  // read from `app.props` at call time: the memoized picker doesn't re-render
+  // when only the host defaults change
+  const getBaselineTopPicks = () =>
+    customizableTopPicks
+      ? applyTopPicksDefaults(
+          builtInTopPicks,
+          app.props.colorTopPicksDefaults?.[customizableTopPicks],
+        )
+      : builtInTopPicks;
+  const baselineTopPicks = getBaselineTopPicks();
+
   // fully-resolved picks currently displayed in the strip — the baseline the
   // drag & drop customization starts from
   const effectiveTopPicks = customTopPicks?.length
     ? customTopPicks
-    : topPicks ??
-      (type === "elementStroke"
-        ? DEFAULT_ELEMENT_STROKE_PICKS
-        : DEFAULT_ELEMENT_BACKGROUND_PICKS);
+    : baselineTopPicks;
+
+  const setTopPickAsDefault =
+    isTopPicksCustomizable &&
+    customizableTopPicks &&
+    app.props.onColorTopPicksDefaultsChange
+      ? (index: number, color: string) => {
+          if (index >= builtInTopPicks.length) {
+            return;
+          }
+          const next = [...getBaselineTopPicks()];
+          // the color moves to its new position: whatever was there takes
+          // its old one, so the strip never shows a color twice
+          const previousIndex = next.indexOf(color);
+          if (previousIndex !== -1) {
+            next[previousIndex] = next[index];
+          }
+          next[index] = color;
+          app.props.onColorTopPicksDefaultsChange?.(
+            customizableTopPicks,
+            next.map((pick, i) => (pick === builtInTopPicks[i] ? null : pick)),
+          );
+        }
+      : undefined;
 
   const resetTopPicks =
     isTopPicksCustomizable && customizableTopPicks
@@ -442,9 +484,14 @@ const ColorPickerComponent = ({
               }
             }}
             type={type}
-            topPicks={customTopPicks?.length ? customTopPicks : topPicks}
+            topPicks={customizableTopPicks ? effectiveTopPicks : topPicks}
             isCustomized={!!customTopPicks?.length}
             onReset={resetTopPicks}
+            onSetAsDefault={setTopPickAsDefault}
+            isDefaultPick={(index, color) =>
+              index >= builtInTopPicks.length ||
+              getBaselineTopPicks()[index] === color
+            }
           />
         )}
         {!isCompactMode && <ButtonSeparator />}

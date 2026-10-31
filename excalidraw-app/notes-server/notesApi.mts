@@ -1,8 +1,9 @@
 /**
  * Local notes storage backed by SQLite (Node's built-in `node:sqlite`).
  *
- * Exposes a connect-style middleware handling `/api/notes/*`, `/api/folders/*`
- * and `/api/library` (the editor's shape library, shared by all notes), used by
+ * Exposes a connect-style middleware handling `/api/notes/*`, `/api/folders/*`,
+ * `/api/library` (the editor's shape library, shared by all notes) and
+ * `/api/color-defaults/*` (the color picker's default top picks), used by
  * the Vite dev server (see `vite.config.mts`), the standalone production
  * server (`server.mts`) and the macOS app (`desktop/`).
  *
@@ -21,6 +22,18 @@ const MAX_BODY_SIZE = 200 * 1024 * 1024; // 200MB (scenes with images)
 
 const DAILY_FOLDER_KIND = "daily";
 const DAILY_FOLDER_NAME = "Notas Diárias";
+
+/** the color pickers whose top picks can get default colors
+ * (`AppState["colorTopPicks"]` keys) */
+const COLOR_TOP_PICKS_SLOTS = new Set([
+  "elementStroke",
+  "elementBackground",
+  "bucketFill",
+  "stickyNoteStroke",
+  "stickyNoteBackground",
+]);
+const MAX_COLOR_TOP_PICKS = 20;
+const MAX_COLOR_LENGTH = 64;
 
 type NoteRow = {
   id: string;
@@ -102,6 +115,15 @@ const openDatabase = (dbFile: string) => {
       kind       TEXT UNIQUE,
       created_at INTEGER NOT NULL
     );
+
+    -- default color of each top-pick position of the color pickers, used by
+    -- notes without their own picks; a missing position keeps the built-in
+    CREATE TABLE IF NOT EXISTS color_top_pick_defaults (
+      slot     TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      color    TEXT NOT NULL,
+      PRIMARY KEY (slot, position)
+    );
   `);
 
   // migrate databases created before folders existed
@@ -157,6 +179,25 @@ const parseFolderName = (name: unknown) => {
     throw new HttpError(400, "folder name is required");
   }
   return trimmed;
+};
+
+/** validates the per-position defaults of a color picker (`null`: none) */
+const parseColorDefaults = (defaults: unknown) => {
+  if (!Array.isArray(defaults) || defaults.length > MAX_COLOR_TOP_PICKS) {
+    throw new HttpError(
+      400,
+      `defaults must be an array of up to ${MAX_COLOR_TOP_PICKS} colors`,
+    );
+  }
+  return defaults.map((color) => {
+    if (color === null || color === "") {
+      return null;
+    }
+    if (typeof color !== "string" || color.length > MAX_COLOR_LENGTH) {
+      throw new HttpError(400, "invalid color");
+    }
+    return color;
+  });
 };
 
 const decodeDataURL = (dataURL: string) => {
@@ -252,6 +293,18 @@ export const createNotesApi = (dbFile: string) => {
        updated_at = excluded.updated_at`,
   );
 
+  const listColorDefaults = db.prepare(
+    `SELECT slot, position, color FROM color_top_pick_defaults
+     ORDER BY slot, position`,
+  );
+  const deleteColorDefaults = db.prepare(
+    `DELETE FROM color_top_pick_defaults WHERE slot = ?`,
+  );
+  const insertColorDefault = db.prepare(
+    `INSERT INTO color_top_pick_defaults (slot, position, color)
+     VALUES (?, ?, ?)`,
+  );
+
   const findNote = (id: string) => {
     const row = getNote.get(id) as NoteRow | undefined;
     if (!row) {
@@ -331,6 +384,23 @@ export const createNotesApi = (dbFile: string) => {
     const id = randomUUID();
     insertFolder.run(id, name, kind, Date.now());
     return toFolder(findFolder(id));
+  };
+
+  /** per slot, the default color of each position (`null`: built-in) */
+  const loadColorDefaults = () => {
+    const defaults: Record<string, (string | null)[]> = {};
+    for (const row of listColorDefaults.all() as {
+      slot: string;
+      position: number;
+      color: string;
+    }[]) {
+      const slot = (defaults[row.slot] ??= []);
+      while (slot.length < row.position) {
+        slot.push(null);
+      }
+      slot[row.position] = row.color;
+    }
+    return defaults;
   };
 
   /** the note of the given day, created in the daily notes folder if needed */
@@ -474,6 +544,32 @@ export const createNotesApi = (dbFile: string) => {
     throw new HttpError(405, "method not allowed");
   };
 
+  const routeColorDefaults = async (
+    req: IncomingMessage,
+    res: ServerResponse,
+    slot: string | undefined,
+  ) => {
+    if (!slot && req.method === "GET") {
+      return sendJSON(res, 200, loadColorDefaults());
+    }
+    if (slot && req.method === "PUT") {
+      if (!COLOR_TOP_PICKS_SLOTS.has(slot)) {
+        throw new HttpError(404, "unknown color picker");
+      }
+      const defaults = parseColorDefaults((await readJSONBody(req)).defaults);
+      transaction(() => {
+        deleteColorDefaults.run(slot);
+        defaults.forEach((color, position) => {
+          if (color) {
+            insertColorDefault.run(slot, position, color);
+          }
+        });
+      });
+      return sendJSON(res, 200, loadColorDefaults());
+    }
+    throw new HttpError(405, "method not allowed");
+  };
+
   const routeFolders = async (
     req: IncomingMessage,
     res: ServerResponse,
@@ -518,6 +614,9 @@ export const createNotesApi = (dbFile: string) => {
 
     if (resource === "library" && !id) {
       return routeLibrary(req, res);
+    }
+    if (resource === "color-defaults" && !action) {
+      return routeColorDefaults(req, res, id);
     }
     if (resource === "folders" && !action) {
       return routeFolders(req, res, id);
@@ -581,7 +680,11 @@ export const createNotesApi = (dbFile: string) => {
   };
 
   return (req: IncomingMessage, res: ServerResponse, next: () => void) => {
-    if (!/^\/api\/(notes|folders|library)(\/|\?|$)/.test(req.url ?? "")) {
+    if (
+      !/^\/api\/(notes|folders|library|color-defaults)(\/|\?|$)/.test(
+        req.url ?? "",
+      )
+    ) {
       return next();
     }
     route(req, res).catch((error) => {

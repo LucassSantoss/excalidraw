@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { useState } from "react";
 
 import {
   applyDarkModeFilter,
@@ -34,6 +35,12 @@ interface TopPicksProps {
   onReset?: () => void;
   /** whether custom picks are currently applied (enables the reset item) */
   isCustomized?: boolean;
+  /** present when picks can become the host-wide default of their position —
+   * adds a context menu item for the right-clicked pick */
+  onSetAsDefault?: (index: number, color: string) => void;
+  /** whether the pick already is the default of its position (read when the
+   * context menu opens) */
+  isDefaultPick?: (index: number, color: string) => boolean;
 }
 
 export const TopPicks = ({
@@ -44,9 +51,17 @@ export const TopPicks = ({
   topPicks,
   onReset,
   isCustomized,
+  onSetAsDefault,
+  isDefaultPick,
 }: TopPicksProps) => {
   const dnd = useColorPickerDnD();
   const dragState = dnd?.dragState ?? null;
+  // the pick the context menu was opened on (`null`: the strip's gaps)
+  const [contextPick, setContextPick] = useState<{
+    index: number;
+    color: string;
+    isDefault: boolean;
+  } | null>(null);
 
   let colors;
   if (type === "elementStroke") {
@@ -76,12 +91,47 @@ export const TopPicks = ({
       onReset={onReset}
       isCustomized={!!isCustomized}
       resetLabel={t("colorPicker.resetTopPicks")}
+      items={
+        onSetAsDefault
+          ? [
+              {
+                label: t("colorPicker.setAsDefaultTopPick"),
+                disabled: !contextPick || contextPick.isDefault,
+                onSelect: () => {
+                  if (contextPick) {
+                    onSetAsDefault(contextPick.index, contextPick.color);
+                  }
+                },
+              },
+            ]
+          : undefined
+      }
     >
       <div
         className={clsx("color-picker__top-picks top-picks-dnd", {
           "is-dnd-active": !!dragState,
         })}
         ref={dnd?.setStripEl}
+        onContextMenu={
+          onSetAsDefault
+            ? (event) => {
+                const button = (
+                  event.target as HTMLElement
+                ).closest<HTMLElement>("[data-top-pick-index]");
+                const index = Number(button?.dataset.topPickIndex);
+                const color = colors?.[index];
+                setContextPick(
+                  button && color
+                    ? {
+                        index,
+                        color,
+                        isDefault: !!isDefaultPick?.(index, color),
+                      }
+                    : null,
+                );
+              }
+            : undefined
+        }
       >
         {dragState && <TopPicksDnDOutline />}
         {colors.map((color: string, index: number) => {

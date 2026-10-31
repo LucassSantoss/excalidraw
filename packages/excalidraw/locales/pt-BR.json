@@ -616,7 +616,8 @@
     "invalidColor": "",
     "invalidHexLength": "",
     "topPicksTip": "",
-    "resetTopPicks": ""
+    "resetTopPicks": "Restaurar cores padrão",
+    "setAsDefaultTopPick": "Definir como cor padrão"
   },
   "overwriteConfirm": {
     "action": {

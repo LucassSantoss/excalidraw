@@ -590,6 +590,14 @@ export interface AppState {
   fontTopPicks: readonly FontFamilyValues[] | null;
 }
 
+export type ColorTopPicksSlot = keyof AppState["colorTopPicks"];
+
+/** per slot, the default color of each top-pick position (`null`/missing:
+ * the built-in pick) */
+export type ColorTopPicksDefaults = Partial<
+  Record<ColorTopPicksSlot, readonly (string | null)[]>
+>;
+
 export type SearchMatch = {
   id: string;
   focus: boolean;
@@ -1047,6 +1055,20 @@ export interface ExcalidrawProps {
     event: CustomEvent<{
       nativeEvent: MouseEvent | React.PointerEvent<HTMLCanvasElement>;
     }>,
+  ) => void;
+  /**
+   * host-wide baseline of the customizable color top picks (shown while a
+   * picker has no `appState.colorTopPicks` customization), per position.
+   * Empty positions fall back to the built-in picks.
+   */
+  colorTopPicksDefaults?: ColorTopPicksDefaults;
+  /**
+   * when set, right-clicking a color top pick offers to make it the default
+   * of its position. Receives the slot's full new defaults (`null`: built-in).
+   */
+  onColorTopPicksDefaultsChange?: (
+    slot: ColorTopPicksSlot,
+    defaults: readonly (string | null)[],
   ) => void;
   onPointerDown?: (
     activeTool: AppState["activeTool"],
