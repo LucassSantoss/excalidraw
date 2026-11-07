@@ -8,7 +8,7 @@ import {
   getPresentationFrames,
   presentationAtom,
   startPresentation,
-} from "../components/Presentation/presentation";
+} from "../components/Presentation/presentationState";
 
 import { API } from "./helpers/api";
 import { Keyboard } from "./helpers/ui";

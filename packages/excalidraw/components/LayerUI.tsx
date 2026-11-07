@@ -41,7 +41,7 @@ import Stack from "./Stack";
 import { UserList } from "./UserList";
 import { PenModeButton } from "./PenModeButton";
 import { Presentation } from "./Presentation/Presentation";
-import { presentationAtom } from "./Presentation/presentation";
+import { presentationAtom } from "./Presentation/presentationState";
 import Footer from "./footer/Footer";
 import { isSidebarDockedAtom } from "./Sidebar/Sidebar";
 import MainMenu from "./main-menu/MainMenu";

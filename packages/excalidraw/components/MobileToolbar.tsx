@@ -36,7 +36,7 @@ import {
   MagicIcon,
   stickyNoteToolIcon,
 } from "./icons";
-import { startPresentation } from "./Presentation/presentation";
+import { startPresentation } from "./Presentation/presentationState";
 
 import "./ToolIcon.scss";
 import "./MobileToolbar.scss";
