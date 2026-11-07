@@ -334,6 +334,7 @@
     "magicframe": "Wireframe para código",
     "embeddable": "Página web incorporada",
     "laser": "Ponteiro de laser",
+    "presentation": "Apresentação",
     "autoshape": "",
     "bucketfill": "",
     "hand": "Mão (ferramenta de rolagem)",
@@ -753,5 +754,12 @@
     "spacebar": "Barra de espaço",
     "delete": "Delete",
     "mmb": "Roda do mouse"
+  },
+  "presentation": {
+    "title": "Apresentação",
+    "noFrames": "Adicione frames ao desenho para apresentá-los",
+    "previous": "Frame anterior",
+    "next": "Próximo frame",
+    "exit": "Sair da apresentação"
   }
 }

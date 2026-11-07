@@ -937,7 +937,8 @@ export class AppViewport {
     SCROLL_CONSTRAINTS_SNAP_BACK_DELAY,
   );
 
-  private cancelTransition = () => {
+  /** stops an ongoing programmatic navigation (`setViewport` animation) */
+  cancelTransition = () => {
     this.activeTransition = null;
     AnimationController.cancel(this.scrollToContentAnimationKey);
   };

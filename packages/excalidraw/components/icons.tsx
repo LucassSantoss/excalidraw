@@ -2566,6 +2566,15 @@ export const chevronDownIcon = createIcon(
   tablerIconProps,
 );
 
+//tabler-icons: chevron-left
+export const chevronLeft = createIcon(
+  <g strokeWidth="1.5">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <polyline points="15 6 9 12 15 18" />
+  </g>,
+  tablerIconProps,
+);
+
 //tabler-icons: chevron-right
 export const chevronRight = createIcon(
   <g strokeWidth="1.5">
