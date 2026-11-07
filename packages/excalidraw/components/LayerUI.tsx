@@ -40,6 +40,8 @@ import { Section } from "./Section";
 import Stack from "./Stack";
 import { UserList } from "./UserList";
 import { PenModeButton } from "./PenModeButton";
+import { Presentation } from "./Presentation/Presentation";
+import { presentationAtom } from "./Presentation/presentation";
 import Footer from "./footer/Footer";
 import { isSidebarDockedAtom } from "./Sidebar/Sidebar";
 import MainMenu from "./main-menu/MainMenu";
@@ -196,6 +198,7 @@ const LayerUI = ({
   const TunnelsJotaiProvider = tunnels.tunnelsJotai.Provider;
 
   const [eyeDropperState, setEyeDropperState] = useAtom(activeEyeDropperAtom);
+  const presentation = useAtomValue(presentationAtom);
 
   const renderJSONExportDialog = () => {
     if (!UIOptions.canvasActions.export) {
@@ -708,7 +711,12 @@ const LayerUI = ({
     <UIAppStateContext.Provider value={appState}>
       <TunnelsJotaiProvider>
         <TunnelsContext.Provider value={tunnels}>
-          {layerUIJSX}
+          {presentation?.appId === app.id ? (
+            // the slides fill the screen: no editor UI but the controls
+            <Presentation app={app} presentation={presentation} />
+          ) : (
+            layerUIJSX
+          )}
         </TunnelsContext.Provider>
       </TunnelsJotaiProvider>
     </UIAppStateContext.Provider>

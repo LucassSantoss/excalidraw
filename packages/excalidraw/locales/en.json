@@ -346,6 +346,7 @@
     "stickynote": "Sticky note",
     "embeddable": "Web Embed",
     "laser": "Laser pointer",
+    "presentation": "Presentation",
     "autoshape": "Draw to shape",
     "bucketfill": "Bucket fill",
     "hand": "Hand (panning tool)",
@@ -783,5 +784,12 @@
     "spacebar": "Space",
     "delete": "Delete",
     "mmb": "Scroll wheel"
+  },
+  "presentation": {
+    "title": "Presentation",
+    "noFrames": "Add frames to the drawing to present them",
+    "previous": "Previous frame",
+    "next": "Next frame",
+    "exit": "Exit presentation"
   }
 }

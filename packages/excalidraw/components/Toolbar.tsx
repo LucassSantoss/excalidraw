@@ -20,11 +20,13 @@ import {
   ImageIcon,
   LassoIcon,
   laserPointerToolIcon,
+  presentationIcon,
   bucketFillIcon,
   MagicIcon,
   mermaidLogoIcon,
   DotsIcon,
 } from "./icons";
+import { startPresentation } from "./Presentation/presentation";
 import {
   ArrowToolButton,
   DiamondToolButton,
@@ -170,6 +172,13 @@ const ExtraToolsDropdown = ({
           disabled={isToolButtonDisabled(app, "laser")}
         >
           {t("toolBar.laser")}
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          onSelect={() => startPresentation(app)}
+          icon={presentationIcon}
+          data-testid="toolbar-presentation"
+        >
+          {t("toolBar.presentation")}
         </DropdownMenu.Item>
         <DropdownMenu.Item
           onSelect={() => app.setActiveTool({ type: "bucketfill" })}

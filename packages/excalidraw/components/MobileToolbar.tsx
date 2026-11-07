@@ -29,12 +29,14 @@ import {
   frameToolIcon,
   EmbedIcon,
   laserPointerToolIcon,
+  presentationIcon,
   drawShapeToolIcon,
   bucketFillIcon,
   mermaidLogoIcon,
   MagicIcon,
   stickyNoteToolIcon,
 } from "./icons";
+import { startPresentation } from "./Presentation/presentation";
 
 import "./ToolIcon.scss";
 import "./MobileToolbar.scss";
@@ -334,6 +336,13 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
             disabled={isToolButtonDisabled(app, "laser")}
           >
             {t("toolBar.laser")}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() => startPresentation(app)}
+            icon={presentationIcon}
+            data-testid="toolbar-presentation"
+          >
+            {t("toolBar.presentation")}
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "bucketfill" })}
