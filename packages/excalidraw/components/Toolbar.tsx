@@ -26,7 +26,7 @@ import {
   mermaidLogoIcon,
   DotsIcon,
 } from "./icons";
-import { startPresentation } from "./Presentation/presentation";
+import { startPresentation } from "./Presentation/presentationState";
 import {
   ArrowToolButton,
   DiamondToolButton,

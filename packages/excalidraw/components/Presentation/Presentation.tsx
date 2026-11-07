@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
 import { CloseIcon, chevronLeft, chevronRight } from "../icons";
 
-import { goToSlide, stopPresentation } from "./presentation";
+import { goToSlide, stopPresentation } from "./presentationState";
 
 import "./Presentation.scss";
 
-import type { PresentationState } from "./presentation";
+import type { PresentationState } from "./presentationState";
 import type { AppClassProperties } from "../../types";
 
 /** the controls fade out after the pointer rests for this long */
