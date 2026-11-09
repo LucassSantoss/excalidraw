@@ -1,4 +1,5 @@
 import {
+  CloseIcon,
   DuplicateIcon,
   PlusIcon,
   TrashIcon,
@@ -12,6 +13,7 @@ import { useHandleAppTheme } from "../useHandleAppTheme";
 
 import {
   calendarIcon,
+  checkIcon,
   chevronRightIcon,
   folderIcon,
   folderPlusIcon,
@@ -70,6 +72,9 @@ const NoteCard = ({
   note,
   folderName,
   isDragging,
+  isSelected,
+  isSelecting,
+  onToggleSelected,
   onOpen,
   onRename,
   onDuplicate,
@@ -81,6 +86,11 @@ const NoteCard = ({
   /** shown when listing notes from several folders (search) */
   folderName?: string;
   isDragging: boolean;
+  isSelected: boolean;
+  /** some note is selected: clicking a card (de)selects it */
+  isSelecting: boolean;
+  /** shift-click selects the range from the last (de)selected note */
+  onToggleSelected: (event: React.MouseEvent) => void;
   onOpen: () => void;
   onRename: () => void;
   onDuplicate: () => void;
@@ -91,6 +101,8 @@ const NoteCard = ({
   <li
     className={clsx("notes-gallery__card", {
       "notes-gallery__card--dragging": isDragging,
+      "notes-gallery__card--selected": isSelected,
+      "notes-gallery__card--selecting": isSelecting,
     })}
     draggable
     onDragStart={(event) => {
@@ -102,9 +114,22 @@ const NoteCard = ({
   >
     <button
       type="button"
+      role="checkbox"
+      aria-checked={isSelected}
+      className="notes-gallery__select"
+      onClick={onToggleSelected}
+      title={isSelected ? "Desmarcar" : "Selecionar"}
+      aria-label={`Selecionar ${note.title || UNTITLED}`}
+    >
+      {isSelected && checkIcon}
+    </button>
+    <button
+      type="button"
       className="notes-gallery__thumbnail"
-      onClick={onOpen}
-      aria-label={`Abrir ${note.title || UNTITLED}`}
+      onClick={(event) => (isSelecting ? onToggleSelected(event) : onOpen())}
+      aria-label={`${isSelecting ? "Selecionar" : "Abrir"} ${
+        note.title || UNTITLED
+      }`}
     >
       {note.hasThumbnail ? (
         <img
@@ -174,6 +199,11 @@ export const NotesGallery = ({
   const [query, setQuery] = useState("");
   const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  // anchor of shift-click range selections
+  const [lastToggledId, setLastToggledId] = useState<string | null>(null);
   const { prompt, confirm, dialog } = usePromptDialog();
 
   const refresh = useCallback(
@@ -195,6 +225,12 @@ export const NotesGallery = ({
   // a folder that no longer exists (e.g. deleted) falls back to the root
   const currentFolder = folders.find((folder) => folder.id === folderId);
   const currentFolderId = currentFolder?.id ?? null;
+
+  // the selection belongs to the folder being browsed
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setLastToggledId(null);
+  }, [currentFolderId]);
 
   useEffect(() => {
     document.title = `${
@@ -365,6 +401,77 @@ export const NotesGallery = ({
     [notes, isSearching, normalizedQuery, currentFolderId],
   );
 
+  // only the notes on screen count as selected (e.g. while searching)
+  const selectedNotes = visibleNotes.filter((note) => selectedIds.has(note.id));
+  const isSelecting = !!selectedNotes.length;
+  const areAllSelected = selectedNotes.length === visibleNotes.length;
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setLastToggledId(null);
+  }, []);
+
+  const toggleSelected = (note: NoteSummary, event: React.MouseEvent) => {
+    const select = !selectedIds.has(note.id);
+    const anchorIndex = visibleNotes.findIndex(
+      (visibleNote) => visibleNote.id === lastToggledId,
+    );
+    const index = visibleNotes.indexOf(note);
+    // shift-click: the whole range from the anchor takes the clicked
+    // note's new state
+    const range =
+      event.shiftKey && anchorIndex !== -1
+        ? visibleNotes.slice(
+            Math.min(anchorIndex, index),
+            Math.max(anchorIndex, index) + 1,
+          )
+        : [note];
+    setSelectedIds((selectedIds) => {
+      const next = new Set(selectedIds);
+      range.forEach((note) =>
+        select ? next.add(note.id) : next.delete(note.id),
+      );
+      return next;
+    });
+    setLastToggledId(note.id);
+  };
+
+  const toggleAllSelected = () =>
+    areAllSelected
+      ? clearSelection()
+      : setSelectedIds(new Set(visibleNotes.map((note) => note.id)));
+
+  const deleteSelectedNotes = async () => {
+    const ids = selectedNotes.map((note) => note.id);
+    const confirmed = await confirm({
+      title:
+        ids.length === 1
+          ? `Excluir "${selectedNotes[0].title || UNTITLED}"?`
+          : `Excluir ${pluralizeNotes(ids.length)}?`,
+      message: "Essa ação não pode ser desfeita.",
+      confirmLabel: ids.length === 1 ? "Excluir" : "Excluir todas",
+      danger: true,
+    });
+    if (confirmed) {
+      clearSelection();
+      run(() => notesApi.removeMany(ids));
+    }
+  };
+
+  // Escape clears the selection (unless a dialog is open: it closes it)
+  useEffect(() => {
+    if (!isSelecting || dialog) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        clearSelection();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isSelecting, dialog, clearSelection]);
+
   const showFolders = !isSearching && !currentFolder && !!folders.length;
   const isEmpty = notes && !notes.length && !folders.length;
 
@@ -373,6 +480,7 @@ export const NotesGallery = ({
       className={clsx("notes-gallery", {
         "notes-gallery--dark": editorTheme === "dark",
         "notes-gallery--dragging": !!draggedNoteId,
+        "notes-gallery--selecting": isSelecting,
       })}
     >
       <header className="notes-gallery__header">
@@ -565,6 +673,9 @@ export const NotesGallery = ({
                 : undefined
             }
             isDragging={draggedNoteId === note.id}
+            isSelected={selectedIds.has(note.id)}
+            isSelecting={isSelecting}
+            onToggleSelected={(event) => toggleSelected(note, event)}
             onOpen={() => onOpenNote(note)}
             onRename={() => renameNote(note)}
             onDuplicate={() => run(() => notesApi.duplicate(note.id))}
@@ -577,6 +688,44 @@ export const NotesGallery = ({
           />
         ))}
       </ul>
+
+      {isSelecting && (
+        <div
+          className="notes-gallery__selection-bar"
+          role="toolbar"
+          aria-label="Notas selecionadas"
+        >
+          <span className="notes-gallery__selection-count">
+            {selectedNotes.length === 1
+              ? "1 nota selecionada"
+              : `${selectedNotes.length} notas selecionadas`}
+          </span>
+          <button
+            type="button"
+            className="notes-gallery__selection-button"
+            onClick={toggleAllSelected}
+          >
+            {areAllSelected ? "Desmarcar todas" : "Selecionar todas"}
+          </button>
+          <button
+            type="button"
+            className="notes-gallery__selection-button notes-gallery__selection-button--danger"
+            onClick={deleteSelectedNotes}
+          >
+            {TrashIcon}
+            Excluir
+          </button>
+          <button
+            type="button"
+            className="notes-gallery__selection-close"
+            onClick={clearSelection}
+            title="Cancelar seleção (Esc)"
+            aria-label="Cancelar seleção"
+          >
+            {CloseIcon}
+          </button>
+        </div>
+      )}
 
       {dialog}
     </div>

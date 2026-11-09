@@ -316,7 +316,13 @@
     list-style: none;
   }
 
+  // room for the selection bar below the last row
+  &--selecting {
+    padding-bottom: 7rem;
+  }
+
   &__card {
+    position: relative;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -336,6 +342,149 @@
 
     &--dragging {
       opacity: 0.4;
+    }
+
+    &--selected {
+      border-color: var(--notes-primary);
+      box-shadow: 0 0 0 1px var(--notes-primary);
+
+      &:hover {
+        box-shadow: 0 0 0 1px var(--notes-primary),
+          0 6px 20px rgba(0, 0, 0, 0.08);
+      }
+    }
+  }
+
+  // shown on hover, and on every card once a note is selected
+  &__select {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 2px solid #b5b5bf;
+    border-radius: 0.375rem;
+    background: rgba(255, 255, 255, 0.9);
+    color: #fff !important;
+    opacity: 0;
+    transition: opacity 0.15s;
+
+    svg {
+      width: 1rem;
+      height: 1rem;
+      stroke-width: 3;
+    }
+
+    &:hover {
+      border-color: var(--notes-primary);
+    }
+
+    &:focus-visible,
+    .notes-gallery__card:hover &,
+    .notes-gallery__card--selecting & {
+      opacity: 1;
+    }
+
+    // touch screens have no hover to reveal it
+    @media (hover: none) {
+      opacity: 1;
+    }
+
+    &[aria-checked="true"] {
+      border-color: var(--notes-primary);
+      background: var(--notes-primary);
+    }
+  }
+
+  .notes-gallery--dark &__select[aria-checked="true"] {
+    color: #121212 !important;
+  }
+
+  &__selection-bar {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    max-width: calc(100vw - 2rem);
+    padding: 0.5rem 0.5rem 0.5rem 1.25rem;
+    border: 1px solid var(--notes-border);
+    border-radius: 0.75rem;
+    background: var(--notes-surface);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+    translate: -50% 0;
+    animation: notes-selection-bar-in 0.15s ease-out;
+
+    // narrow screens: the count on its own line, the buttons below it
+    @media (max-width: 600px) {
+      right: 1rem;
+      left: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      padding: 0.75rem;
+      translate: none;
+
+      .notes-gallery__selection-count {
+        flex-basis: 100%;
+        margin: 0;
+        text-align: center;
+      }
+    }
+  }
+
+  &__selection-count {
+    margin-right: 0.5rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  &__selection-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    height: 2.25rem;
+    padding: 0 0.875rem;
+    border: 1px solid var(--notes-border);
+    border-radius: 0.5rem;
+    background: var(--notes-surface);
+    font-weight: 600;
+    white-space: nowrap;
+
+    &:hover {
+      border-color: var(--notes-primary);
+      color: var(--notes-primary);
+    }
+
+    &--danger {
+      border-color: var(--notes-danger);
+      background: var(--notes-danger);
+      color: #fff !important;
+
+      &:hover {
+        filter: brightness(0.92);
+        color: #fff !important;
+      }
+    }
+  }
+
+  &__selection-close {
+    display: flex;
+    padding: 0.5rem;
+    border: none;
+    border-radius: 0.5rem;
+    background: transparent;
+    color: var(--notes-text-muted);
+
+    &:hover {
+      background: var(--notes-bg);
+      color: var(--notes-text);
     }
   }
 
@@ -414,5 +563,12 @@
     .notes-gallery__delete:hover {
       color: var(--notes-danger);
     }
+  }
+}
+
+@keyframes notes-selection-bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
   }
 }
