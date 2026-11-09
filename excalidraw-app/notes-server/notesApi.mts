@@ -463,6 +463,25 @@ export const createNotesApi = (dbFile: string) => {
     return toNoteSummary(findNote(id));
   };
 
+  /** deletes several notes at once: all of them, or none if one is missing */
+  const deleteNotes = (ids: unknown) => {
+    if (
+      !Array.isArray(ids) ||
+      !ids.length ||
+      !ids.every((id) => typeof id === "string")
+    ) {
+      throw new HttpError(400, "ids must be a non-empty array of note ids");
+    }
+    const uniqueIds = [...new Set(ids as string[])];
+    transaction(() => {
+      for (const id of uniqueIds) {
+        findNote(id);
+        deleteNote.run(id);
+      }
+    });
+    return { deleted: uniqueIds.length };
+  };
+
   const updateNote = (id: string, update: NoteUpdate) => {
     const note = findNote(id);
     const folderId =
@@ -648,6 +667,10 @@ export const createNotesApi = (dbFile: string) => {
             parseFolderId(body.folderId, false),
           ),
         );
+      }
+      if (method === "DELETE") {
+        const body = await readJSONBody(req);
+        return sendJSON(res, 200, deleteNotes(body.ids));
       }
     } else if (!action) {
       if (method === "GET") {

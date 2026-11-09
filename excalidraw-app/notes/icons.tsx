@@ -41,3 +41,8 @@ export const chevronRightIcon = createIcon(
   <path d="M9 6l6 6l-6 6" />,
   tablerIconProps,
 );
+
+export const checkIcon = createIcon(
+  <path d="M5 12l5 5l10 -10" />,
+  tablerIconProps,
+);

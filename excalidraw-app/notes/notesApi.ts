@@ -88,6 +88,12 @@ export const notesApi = {
       body: JSON.stringify({ folderId }),
     }),
   remove: (id: string) => request<void>(`/notes/${id}`, { method: "DELETE" }),
+  /** deletes all the given notes, or none if one doesn't exist */
+  removeMany: (ids: readonly string[]) =>
+    request<{ deleted: number }>("/notes", {
+      method: "DELETE",
+      body: JSON.stringify({ ids }),
+    }),
   thumbnailURL: (note: NoteSummary) =>
     `${API_URL}/notes/${note.id}/thumbnail?v=${note.updatedAt}`,
 };
