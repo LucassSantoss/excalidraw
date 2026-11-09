@@ -8,6 +8,7 @@ Excalidraw is a **monorepo** with a clear separation between the core library an
 - **`excalidraw-app/`** - Full-featured web application (excalidraw.com) that uses the library
 - **`packages/`** - Core packages: `@excalidraw/common`, `@excalidraw/element`, `@excalidraw/math`, `@excalidraw/utils`
 - **`examples/`** - Integration examples (NextJS, browser script)
+- **`excalidraw-app/notes-server/`** - Local notes API. To read or create notes programmatically, follow its `README.md`, and keep that file up to date when changing the API
 
 ## Development Workflow
 
