@@ -1,4 +1,4 @@
-import { InvalidInputError } from "./errors.mts";
+import { ConflictError, InvalidInputError } from "./errors.mts";
 
 /** a note as listed in the gallery (without its scene) */
 export type NoteSummary = {
@@ -33,10 +33,28 @@ export type NoteUpdate = {
   files?: Record<string, NoteFile>;
   /** PNG data URL, or `null` to clear */
   thumbnail?: string | null;
+  /**
+   * the `updatedAt` of the note the changes were made on: when the note has
+   * changed since (elsewhere), the update is refused. Omit to always write.
+   */
+  baseUpdatedAt?: number;
 };
 
 const UNTITLED_NOTE_TITLE = "Sem título";
 const DAILY_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** refuses changes made on an outdated version of the note */
+export const assertUpToDate = (note: NoteSummary, baseUpdatedAt: unknown) => {
+  if (baseUpdatedAt === undefined) {
+    return;
+  }
+  if (typeof baseUpdatedAt !== "number") {
+    throw new InvalidInputError("baseUpdatedAt must be a number");
+  }
+  if (note.updatedAt !== baseUpdatedAt) {
+    throw new ConflictError("note was changed elsewhere");
+  }
+};
 
 /** title of a duplicated note */
 export const getCopyTitle = (title: string) =>

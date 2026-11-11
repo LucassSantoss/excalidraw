@@ -36,6 +36,10 @@
       color: var(--color-gray-40);
     }
 
+    &--conflict {
+      color: #b07d12;
+    }
+
     &--error {
       color: var(--color-danger, #db6965);
       font-weight: 600;
@@ -75,4 +79,61 @@
   gap: 1rem;
   height: 100%;
   font-family: system-ui, sans-serif;
+}
+
+// the note changed elsewhere: what to do with the changes made here
+.note-editor__conflict {
+  position: fixed;
+  top: 4.5rem;
+  right: 1rem;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  box-sizing: border-box;
+  width: min(24rem, calc(100vw - 2rem));
+  padding: 0.875rem 1rem;
+  border: 1px solid #f0b429;
+  border-radius: 0.75rem;
+  background: #fff8e6;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  color: #5f4100;
+  font-family: "Assistant", system-ui, -apple-system, sans-serif;
+  font-size: 0.875rem;
+
+  p {
+    margin: 0;
+    line-height: 1.35;
+  }
+
+  .note-editor__conflict-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  button {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid #e0b25b;
+    border-radius: 0.5rem;
+    background: #fff;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+
+    &:hover {
+      border-color: #b07d12;
+    }
+  }
+
+  .note-editor__conflict-overwrite {
+    border-color: #b07d12;
+    background: #b07d12;
+    color: #fff;
+
+    &:hover {
+      background: #946809;
+    }
+  }
 }

@@ -1,4 +1,5 @@
 import {
+  ConflictError,
   DomainError,
   ForbiddenError,
   InvalidInputError,
@@ -31,6 +32,8 @@ export const getErrorStatus = (error: unknown) => {
       ? 403
       : error instanceof InvalidInputError
       ? 400
+      : error instanceof ConflictError
+      ? 409
       : 500;
   }
   return 500;

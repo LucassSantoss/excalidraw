@@ -13,3 +13,6 @@ export class InvalidInputError extends DomainError {}
 
 /** the input is well-formed but not allowed (e.g. renaming the daily folder) */
 export class ForbiddenError extends DomainError {}
+
+/** the data changed since the client last read it (e.g. in another window) */
+export class ConflictError extends DomainError {}

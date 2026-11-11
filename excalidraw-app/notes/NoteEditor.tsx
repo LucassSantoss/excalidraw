@@ -1,4 +1,5 @@
 import {
+  CaptureUpdateAction,
   Excalidraw,
   MainMenu,
   WelcomeScreen,
@@ -6,6 +7,7 @@ import {
   getDataURL,
   getNonDeletedElements,
   hashElementsVersion,
+  restoreElements,
   useExcalidrawAPI,
   useHandleLibrary,
 } from "@excalidraw/excalidraw";
@@ -34,14 +36,17 @@ import {
   IndexedDBLibraryMigrationAdapter,
   SQLiteLibraryAdapter,
 } from "./libraryAdapters";
-import { colorDefaultsApi, notesApi } from "./notesApi";
+import { colorDefaultsApi, isConflictError, notesApi } from "./notesApi";
 
 import "./NoteEditor.scss";
 
+import type { Note } from "./notesApi";
+
 const SAVE_DEBOUNCE_MS = 800;
+const UNTITLED = "Sem título";
 const THUMBNAIL_MAX_SIZE = 480;
 
-type SaveStatus = "saved" | "pending" | "saving" | "error";
+type SaveStatus = "saved" | "pending" | "saving" | "error" | "conflict";
 
 type SceneSnapshot = {
   elements: readonly ExcalidrawElement[];
@@ -54,6 +59,7 @@ const SAVE_STATUS_LABELS: Record<SaveStatus, string> = {
   pending: "Alterações não salvas",
   saving: "Salvando…",
   error: "Erro ao salvar",
+  conflict: "Alterada em outro lugar",
 };
 
 const createThumbnail = async ({
@@ -77,10 +83,20 @@ const createThumbnail = async ({
   return getDataURL(blob);
 };
 
+const createThumbnailOrSkip = (snapshot: SceneSnapshot) =>
+  createThumbnail(snapshot).catch((error) => {
+    console.error("Failed to create note thumbnail", error);
+    return undefined;
+  });
+
 /**
  * Keeps a note in sync with the server: debounces scene changes, sends only
- * images the server doesn't have yet, and serializes saves so they never
- * overlap.
+ * images the server doesn't have yet, and serializes saves (scene and title)
+ * so they never overlap.
+ *
+ * Each save is made on the version of the note last loaded or saved here:
+ * when the note changed elsewhere since (another window, the API), the
+ * server refuses it and saving stops (`conflict`) until it's resolved.
  */
 const useNoteSaver = (noteId: string) => {
   const [status, setStatus] = useState<SaveStatus>("saved");
@@ -92,6 +108,14 @@ const useNoteSaver = (noteId: string) => {
     viewBackgroundColor: null as string | null,
     savedFileIds: new Set<string>(),
     pending: null as SceneSnapshot | null,
+    pendingTitle: null as string | null,
+    // the latest scene, saved or not
+    latest: null as SceneSnapshot | null,
+    // `updatedAt` of the version of the note the changes are made on
+    baseUpdatedAt: null as number | null,
+    conflict: false,
+    // the next save overwrites changes made elsewhere
+    force: false,
     timer: 0,
     queue: Promise.resolve(),
   });
@@ -102,44 +126,73 @@ const useNoteSaver = (noteId: string) => {
 
     state.queue = state.queue.then(async () => {
       const snapshot = state.pending;
-      if (!snapshot) {
+      const title = state.pendingTitle;
+      if (state.conflict || (!snapshot && title === null)) {
         return;
       }
       state.pending = null;
+      state.pendingTitle = null;
       setStatus("saving");
 
       const newFiles: BinaryFiles = {};
-      for (const [id, file] of Object.entries(snapshot.files)) {
+      for (const [id, file] of Object.entries(snapshot?.files ?? {})) {
         if (!state.savedFileIds.has(id)) {
           newFiles[id] = file;
         }
       }
 
       try {
-        await notesApi.update(noteId, {
-          elements: snapshot.elements,
-          appState: clearAppStateForLocalStorage(snapshot.appState),
-          files: newFiles,
-          thumbnail: await createThumbnail(snapshot).catch((error) => {
-            console.error("Failed to create note thumbnail", error);
-            return undefined;
+        const note = await notesApi.update(noteId, {
+          ...(title !== null && { title }),
+          ...(snapshot && {
+            elements: snapshot.elements,
+            appState: clearAppStateForLocalStorage(snapshot.appState),
+            files: newFiles,
+            thumbnail: await createThumbnailOrSkip(snapshot),
           }),
+          baseUpdatedAt:
+            state.force || state.baseUpdatedAt === null
+              ? undefined
+              : state.baseUpdatedAt,
         });
+        state.force = false;
+        state.baseUpdatedAt = note.updatedAt;
         Object.keys(newFiles).forEach((id) => state.savedFileIds.add(id));
-        setStatus(state.pending ? "pending" : "saved");
+        setStatus(
+          state.pending || state.pendingTitle !== null ? "pending" : "saved",
+        );
       } catch (error) {
-        console.error("Failed to save note", error);
         // retry with the next change (or flush) unless newer changes exist
         state.pending ??= snapshot;
-        setStatus("error");
+        if (title !== null) {
+          state.pendingTitle ??= title;
+        }
+        if (isConflictError(error)) {
+          state.conflict = true;
+          setStatus("conflict");
+        } else {
+          console.error("Failed to save note", error);
+          setStatus("error");
+        }
       }
     });
 
     return state.queue;
   }, [noteId]);
 
-  const onLoaded = useCallback((files: BinaryFiles) => {
-    stateRef.current.savedFileIds = new Set(Object.keys(files));
+  /** the note as loaded from the server (initially, or reloaded) */
+  const onLoaded = useCallback((note: Note) => {
+    const state = stateRef.current;
+    window.clearTimeout(state.timer);
+    state.savedFileIds = new Set(Object.keys(note.files));
+    state.baseUpdatedAt = note.updatedAt;
+    state.sceneVersion = null;
+    state.pending = null;
+    state.pendingTitle = null;
+    state.latest = null;
+    state.conflict = false;
+    state.force = false;
+    setStatus("saved");
   }, []);
 
   const onChange = useCallback(
@@ -171,17 +224,38 @@ const useNoteSaver = (noteId: string) => {
       state.sceneVersion = sceneVersion;
       state.viewBackgroundColor = appState.viewBackgroundColor;
       state.pending = { elements, appState, files };
-      setStatus("pending");
+      state.latest = state.pending;
       window.clearTimeout(state.timer);
-      state.timer = window.setTimeout(save, SAVE_DEBOUNCE_MS);
+      // while in conflict, changes are kept until it's resolved
+      if (!state.conflict) {
+        setStatus("pending");
+        state.timer = window.setTimeout(save, SAVE_DEBOUNCE_MS);
+      }
     },
     [save],
   );
 
+  const saveTitle = useCallback(
+    (title: string) => {
+      stateRef.current.pendingTitle = title;
+      return save();
+    },
+    [save],
+  );
+
+  /** saves the changes made here over the ones made elsewhere */
+  const overwrite = useCallback(() => {
+    const state = stateRef.current;
+    state.conflict = false;
+    state.force = true;
+    return save();
+  }, [save]);
+
   useEffect(() => {
     const state = stateRef.current;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (state.pending) {
+      // (while in conflict, the editor saves the changes as a copy)
+      if ((state.pending || state.pendingTitle !== null) && !state.conflict) {
         save();
         event.preventDefault();
       }
@@ -194,7 +268,32 @@ const useNoteSaver = (noteId: string) => {
     };
   }, [save]);
 
-  return { status, onChange, onLoaded, flush: save };
+  const isConflicted = useCallback(() => stateRef.current.conflict, []);
+  /** the latest scene, if it changed since it was loaded */
+  const getLatestScene = useCallback(() => stateRef.current.latest, []);
+
+  return useMemo(
+    () => ({
+      status,
+      onChange,
+      onLoaded,
+      flush: save,
+      saveTitle,
+      overwrite,
+      isConflicted,
+      getLatestScene,
+    }),
+    [
+      status,
+      onChange,
+      onLoaded,
+      save,
+      saveTitle,
+      overwrite,
+      isConflicted,
+      getLatestScene,
+    ],
+  );
 };
 
 /**
@@ -257,6 +356,11 @@ export const NoteEditor = ({
     migrationAdapter: IndexedDBLibraryMigrationAdapter,
   });
 
+  // where a copy of the note goes (`saveAsCopy`)
+  const noteRef = useRef<Pick<Note, "folderId" | "isDaily"> | null>(null);
+  const titleRef = useRef(title);
+  titleRef.current = title;
+
   const { onLoaded } = saver;
   const initialData = useMemo(
     () =>
@@ -264,7 +368,8 @@ export const NoteEditor = ({
         .get(noteId)
         .then((note): ExcalidrawInitialDataState => {
           setTitle(note.title);
-          onLoaded(note.files);
+          noteRef.current = note;
+          onLoaded(note);
           return {
             elements: note.elements,
             appState: note.appState,
@@ -282,15 +387,138 @@ export const NoteEditor = ({
     document.title = `${title || "Sem título"} — Excalidraw Notes`;
   }, [title]);
 
+  /** discards the changes made here: shows the note as saved */
+  const reload = useCallback(async () => {
+    const note = await notesApi.get(noteId);
+    noteRef.current = note;
+    onLoaded(note);
+    setTitle(note.title);
+    if (excalidrawAPI) {
+      excalidrawAPI.addFiles(Object.values(note.files));
+      excalidrawAPI.updateScene({
+        elements: restoreElements(note.elements, null),
+        appState: note.appState.viewBackgroundColor
+          ? { viewBackgroundColor: note.appState.viewBackgroundColor }
+          : undefined,
+        captureUpdate: CaptureUpdateAction.NEVER,
+      });
+      // undo would bring the discarded changes back
+      excalidrawAPI.history.clear();
+    }
+  }, [noteId, onLoaded, excalidrawAPI]);
+
+  /**
+   * saves the changes made here as a new note, next to this one (the daily
+   * notes folder only holds daily notes), then shows this note as saved
+   */
+  const { getLatestScene, isConflicted } = saver;
+  const saveAsCopy = useCallback(async () => {
+    const scene: SceneSnapshot | null =
+      getLatestScene() ??
+      (excalidrawAPI && {
+        elements: excalidrawAPI.getSceneElementsIncludingDeleted(),
+        appState: excalidrawAPI.getAppState(),
+        files: excalidrawAPI.getFiles(),
+      });
+    const copy = await notesApi.create(
+      `${titleRef.current || UNTITLED} (conflito)`,
+      noteRef.current?.isDaily ? null : noteRef.current?.folderId ?? null,
+    );
+    if (scene) {
+      await notesApi.update(copy.id, {
+        elements: scene.elements,
+        appState: clearAppStateForLocalStorage(scene.appState),
+        files: scene.files,
+        thumbnail: await createThumbnailOrSkip(scene),
+      });
+    }
+    return copy;
+  }, [getLatestScene, excalidrawAPI]);
+
+  const resolveConflict = async (
+    resolution: "reload" | "overwrite" | "copy",
+  ) => {
+    try {
+      if (resolution === "overwrite") {
+        await saver.overwrite();
+      } else if (resolution === "reload") {
+        await reload();
+      } else {
+        const copy = await saveAsCopy();
+        await reload();
+        excalidrawAPI?.setToast({
+          message: `Suas alterações foram salvas em "${copy.title}".`,
+          duration: 5000,
+          closable: true,
+        });
+      }
+    } catch (error: any) {
+      console.error("Failed to resolve the conflict", error);
+      excalidrawAPI?.setToast({
+        message: `Não foi possível concluir: ${error.message}`,
+        closable: true,
+      });
+    }
+  };
+
+  // leaving while in conflict keeps the changes made here in a copy, instead
+  // of losing them (or, in the macOS app, never closing: it retries closing
+  // until nothing is pending)
+  const isSavingCopyRef = useRef(false);
+  const leaveWhileConflicted = useCallback(async () => {
+    if (isSavingCopyRef.current) {
+      return;
+    }
+    isSavingCopyRef.current = true;
+    try {
+      await saveAsCopy();
+      await reload();
+    } finally {
+      isSavingCopyRef.current = false;
+    }
+  }, [saveAsCopy, reload]);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (isConflicted()) {
+        leaveWhileConflicted();
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isConflicted, leaveWhileConflicted]);
+
+  // closed some other way (e.g. the browser's back button) while in
+  // conflict: the editor is gone, only the copy can be saved
+  const saveAsCopyRef = useRef(saveAsCopy);
+  saveAsCopyRef.current = saveAsCopy;
+  useEffect(
+    () => () => {
+      if (isConflicted() && !isSavingCopyRef.current) {
+        saveAsCopyRef
+          .current()
+          .catch((error) =>
+            console.error("Failed to save the note as a copy", error),
+          );
+      }
+    },
+    [isConflicted],
+  );
+
   const close = async () => {
-    await saver.flush();
+    if (saver.isConflicted()) {
+      await leaveWhileConflicted().catch((error) =>
+        console.error("Failed to save the note as a copy", error),
+      );
+    } else {
+      await saver.flush();
+    }
     onClose();
   };
 
   const saveTitle = (value: string) => {
-    notesApi.update(noteId, { title: value }).catch((error) => {
-      console.error("Failed to rename note", error);
-    });
+    saver.saveTitle(value);
   };
 
   if (loadError) {
@@ -338,6 +566,38 @@ export const NoteEditor = ({
                   }
                 }}
               />
+            )}
+            {saver.status === "conflict" && (
+              <div className="note-editor__conflict" role="alert">
+                <p>
+                  Esta nota foi alterada em outro lugar. Suas alterações daqui
+                  ainda não foram salvas.
+                </p>
+                <div className="note-editor__conflict-actions">
+                  <button
+                    type="button"
+                    onClick={() => resolveConflict("reload")}
+                    title="Descarta as alterações daqui e mostra a versão salva"
+                  >
+                    Recarregar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => resolveConflict("copy")}
+                    title="Salva as alterações daqui numa nota nova e mostra a versão salva"
+                  >
+                    Salvar como cópia
+                  </button>
+                  <button
+                    type="button"
+                    className="note-editor__conflict-overwrite"
+                    onClick={() => resolveConflict("overwrite")}
+                    title="Salva as alterações daqui por cima das feitas em outro lugar"
+                  >
+                    Manter a minha
+                  </button>
+                </div>
+              </div>
             )}
             <span
               className={clsx(
