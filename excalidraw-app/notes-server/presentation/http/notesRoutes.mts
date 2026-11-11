@@ -42,6 +42,9 @@ export const createNotesRoutes =
       }
     } else if (action === "duplicate" && method === "POST") {
       return sendJSON(res, 201, notes.duplicate(id));
+    } else if (action === "thumbnail" && method === "PUT") {
+      const body = await readJSONBody(req);
+      return sendJSON(res, 200, notes.saveThumbnail(id, body));
     } else if (action === "thumbnail" && method === "GET") {
       const thumbnail = notes.findThumbnail(id);
       res.setHeader("Content-Type", "image/png");

@@ -3,18 +3,12 @@ import {
   Excalidraw,
   MainMenu,
   WelcomeScreen,
-  exportScene,
-  getDataURL,
-  getNonDeletedElements,
   hashElementsVersion,
   restoreElements,
   useExcalidrawAPI,
   useHandleLibrary,
 } from "@excalidraw/excalidraw";
-import {
-  cleanAppStateForExport,
-  clearAppStateForLocalStorage,
-} from "@excalidraw/excalidraw/appState";
+import { clearAppStateForLocalStorage } from "@excalidraw/excalidraw/appState";
 import { gridIcon } from "@excalidraw/excalidraw/components/icons";
 import clsx from "clsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -38,6 +32,8 @@ import {
 } from "./libraryAdapters";
 import { colorDefaultsApi, isConflictError, notesApi } from "./notesApi";
 
+import { renderThumbnail } from "./thumbnail";
+
 import "./NoteEditor.scss";
 
 import type { Note } from "./notesApi";
@@ -47,7 +43,6 @@ const UNTITLED = "Sem título";
 /** the macOS app (Electron), where closing waits for pending saves without
  * asking the user (see `desktop/src/main.mts`) */
 const IS_DESKTOP_APP = navigator.userAgent.includes("Electron");
-const THUMBNAIL_MAX_SIZE = 480;
 
 type SaveStatus = "saved" | "pending" | "saving" | "error" | "conflict";
 
@@ -65,29 +60,8 @@ const SAVE_STATUS_LABELS: Record<SaveStatus, string> = {
   conflict: "Alterada em outro lugar",
 };
 
-const createThumbnail = async ({
-  elements,
-  appState,
-  files,
-}: SceneSnapshot) => {
-  const visibleElements = getNonDeletedElements(elements);
-  if (!visibleElements.length) {
-    return null;
-  }
-  const blob = await exportScene({
-    type: "png",
-    data: {
-      elements: visibleElements,
-      appState: cleanAppStateForExport(appState),
-      files,
-    },
-    config: { maxWidthOrHeight: THUMBNAIL_MAX_SIZE, padding: 16 },
-  });
-  return getDataURL(blob);
-};
-
 const createThumbnailOrSkip = (snapshot: SceneSnapshot) =>
-  createThumbnail(snapshot).catch((error) => {
+  renderThumbnail(snapshot).catch((error) => {
     console.error("Failed to create note thumbnail", error);
     return undefined;
   });
@@ -277,11 +251,12 @@ const useNoteSaver = (noteId: string) => {
           state.thumbnailStale = false;
           return;
         }
-        const note = await notesApi.update(noteId, {
+        // doesn't bump `updatedAt`: the base version stays the same
+        await notesApi.saveThumbnail(
+          noteId,
           thumbnail,
-          baseUpdatedAt: state.baseUpdatedAt ?? undefined,
-        });
-        state.baseUpdatedAt = note.updatedAt;
+          state.baseUpdatedAt ?? undefined,
+        );
         // unless the scene changed (and was saved) meanwhile
         state.thumbnailStale = state.latest !== scene;
       } catch (error) {

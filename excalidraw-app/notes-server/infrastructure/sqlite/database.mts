@@ -77,6 +77,19 @@ export const openDatabase = (dbFile: string) => {
     // YYYY-MM-DD of daily notes, so each day has a single one
     db.exec(`ALTER TABLE notes ADD COLUMN daily_date TEXT`);
   }
+  if (!noteColumns.has("thumbnail_stale")) {
+    // 1 when the scene changed since the thumbnail was rendered (or a scene
+    // was saved without any, e.g. through the API)
+    db.exec(`ALTER TABLE notes ADD COLUMN thumbnail_stale INTEGER NOT NULL
+      DEFAULT 0`);
+    db.exec(`UPDATE notes SET thumbnail_stale = 1
+      WHERE thumbnail IS NULL AND elements <> '[]'`);
+  }
+  if (!noteColumns.has("thumbnail_version")) {
+    // bumped with each thumbnail saved, so clients don't show a cached one
+    db.exec(`ALTER TABLE notes ADD COLUMN thumbnail_version INTEGER NOT NULL
+      DEFAULT 0`);
+  }
   db.exec(`
     CREATE INDEX IF NOT EXISTS notes_folder_id ON notes (folder_id);
     CREATE UNIQUE INDEX IF NOT EXISTS notes_daily_date ON notes (daily_date)

@@ -18,6 +18,11 @@ export type NoteSummary = {
   createdAt: number;
   updatedAt: number;
   hasThumbnail: boolean;
+  /** the scene changed since the thumbnail was rendered (or has none yet,
+   * e.g. created through the API) */
+  needsThumbnail: boolean;
+  /** changes with each thumbnail saved */
+  thumbnailVersion: number;
 };
 
 export type Folder = {
@@ -98,6 +103,17 @@ export const notesApi = {
       method: "PUT",
       body: JSON.stringify(update),
     }),
+  /** saves a rendered thumbnail without bumping `updatedAt`; refused (409)
+   * if the note changed since `baseUpdatedAt` */
+  saveThumbnail: (
+    id: string,
+    thumbnail: string | null,
+    baseUpdatedAt?: number,
+  ) =>
+    request<NoteSummary>(`/notes/${id}/thumbnail`, {
+      method: "PUT",
+      body: JSON.stringify({ thumbnail, baseUpdatedAt }),
+    }),
   duplicate: (id: string) =>
     request<NoteSummary>(`/notes/${id}/duplicate`, { method: "POST" }),
   move: (id: string, folderId: string | null) =>
@@ -113,7 +129,7 @@ export const notesApi = {
       body: JSON.stringify({ ids }),
     }),
   thumbnailURL: (note: NoteSummary) =>
-    `${API_URL}/notes/${note.id}/thumbnail?v=${note.updatedAt}`,
+    `${API_URL}/notes/${note.id}/thumbnail?v=${note.thumbnailVersion}`,
 };
 
 export const foldersApi = {

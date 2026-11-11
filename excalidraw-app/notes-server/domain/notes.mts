@@ -11,6 +11,13 @@ export type NoteSummary = {
   createdAt: number;
   updatedAt: number;
   hasThumbnail: boolean;
+  /**
+   * the scene changed since the thumbnail was rendered, or was saved without
+   * one (e.g. through the API): clients render and save it
+   */
+  needsThumbnail: boolean;
+  /** changes with each thumbnail saved (e.g. to tell cached ones apart) */
+  thumbnailVersion: number;
 };
 
 /** an image of the scene (`BinaryFileData`), stored apart from the elements */

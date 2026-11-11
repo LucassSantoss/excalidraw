@@ -144,6 +144,8 @@ describe("notes API: notes", () => {
       createdAt: expect.any(Number),
       updatedAt: created.body.createdAt,
       hasThumbnail: false,
+      needsThumbnail: false,
+      thumbnailVersion: 0,
     });
 
     await tick();
@@ -634,11 +636,16 @@ describe("notes API: database", () => {
       );
       INSERT INTO notes (id, title, created_at, updated_at)
         VALUES ('old', 'Old note', 1, 1);
+      INSERT INTO notes (id, title, elements, created_at, updated_at)
+        VALUES ('drawn', 'Drawn', '[{"id":"a"}]', 0, 0);
     `);
     old.close();
 
     await startServer();
-    expect((await request("GET", "/api/notes")).body).toEqual([
+    const notes = (await request("GET", "/api/notes")).body;
+    // a scene without a thumbnail (e.g. saved through the API) needs one
+    expect(notes[1]).toMatchObject({ id: "drawn", needsThumbnail: true });
+    expect(notes.slice(0, 1)).toEqual([
       {
         id: "old",
         title: "Old note",
@@ -647,6 +654,8 @@ describe("notes API: database", () => {
         createdAt: 1,
         updatedAt: 1,
         hasThumbnail: false,
+        needsThumbnail: false,
+        thumbnailVersion: 0,
       },
     ]);
     expect(
@@ -734,5 +743,106 @@ describe("notes API: concurrent changes", () => {
       status: 400,
       body: { error: "baseUpdatedAt must be a number" },
     });
+  });
+});
+
+describe("notes API: thumbnails to render", () => {
+  it("flags notes whose scene changed without a thumbnail", async () => {
+    const note = await createNote();
+    expect(note.needsThumbnail).toBe(false);
+
+    const saved = await request("PUT", `/api/notes/${note.id}`, {
+      elements: [{ id: "a" }],
+    });
+    expect(saved.body.needsThumbnail).toBe(true);
+    const copy = await request("POST", `/api/notes/${note.id}/duplicate`);
+    expect(copy.body.needsThumbnail).toBe(true);
+
+    const withThumbnail = await request("PUT", `/api/notes/${note.id}`, {
+      elements: [{ id: "b" }],
+      thumbnail: PNG_DATA_URL,
+    });
+    expect(withThumbnail.body).toMatchObject({
+      hasThumbnail: true,
+      needsThumbnail: false,
+      thumbnailVersion: 1,
+    });
+
+    // other changes don't outdate the thumbnail
+    const renamed = await request("PUT", `/api/notes/${note.id}`, {
+      title: "Renamed",
+      appState: { zoom: { value: 2 } },
+    });
+    expect(renamed.body.needsThumbnail).toBe(false);
+  });
+
+  it("saves a thumbnail without bumping updatedAt", async () => {
+    const note = await createNote();
+    const saved = (
+      await request("PUT", `/api/notes/${note.id}`, {
+        elements: [{ id: "a" }],
+      })
+    ).body;
+    await tick();
+
+    const response = await request("PUT", `/api/notes/${note.id}/thumbnail`, {
+      thumbnail: PNG_DATA_URL,
+      baseUpdatedAt: saved.updatedAt,
+    });
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      hasThumbnail: true,
+      needsThumbnail: false,
+      updatedAt: saved.updatedAt,
+      thumbnailVersion: saved.thumbnailVersion + 1,
+    });
+    const thumbnail = await fetch(`${baseURL}/api/notes/${note.id}/thumbnail`);
+    expect(Buffer.from(await thumbnail.arrayBuffer()).toString("base64")).toBe(
+      PNG_BASE64,
+    );
+
+    // an empty scene has no thumbnail
+    expect(
+      (
+        await request("PUT", `/api/notes/${note.id}/thumbnail`, {
+          thumbnail: null,
+        })
+      ).body,
+    ).toMatchObject({ hasThumbnail: false, needsThumbnail: false });
+  });
+
+  it("refuses a thumbnail of an outdated scene, and validates it", async () => {
+    const note = await createNote();
+    await tick();
+    await request("PUT", `/api/notes/${note.id}`, { elements: [{ id: "a" }] });
+
+    expect(
+      await request("PUT", `/api/notes/${note.id}/thumbnail`, {
+        thumbnail: PNG_DATA_URL,
+        baseUpdatedAt: note.updatedAt,
+      }),
+    ).toMatchObject({
+      status: 409,
+      body: { error: "note was changed elsewhere" },
+    });
+    expect(
+      (await request("GET", `/api/notes/${note.id}`)).body.needsThumbnail,
+    ).toBe(true);
+
+    expect(
+      await request("PUT", `/api/notes/${note.id}/thumbnail`, {}),
+    ).toMatchObject({ status: 400, body: { error: "thumbnail is required" } });
+    expect(
+      await request("PUT", `/api/notes/${note.id}/thumbnail`, {
+        thumbnail: "nope",
+      }),
+    ).toMatchObject({ status: 400, body: { error: "invalid thumbnail" } });
+    expect(
+      (
+        await request("PUT", "/api/notes/missing/thumbnail", {
+          thumbnail: null,
+        })
+      ).status,
+    ).toBe(404);
   });
 });
