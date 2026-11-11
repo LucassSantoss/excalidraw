@@ -21,12 +21,16 @@ import {
   LassoIcon,
   laserPointerToolIcon,
   presentationIcon,
+  listNumbersIcon,
   bucketFillIcon,
   MagicIcon,
   mermaidLogoIcon,
   DotsIcon,
 } from "./icons";
-import { startPresentation } from "./Presentation/presentationState";
+import {
+  openSlidesDialog,
+  startPresentation,
+} from "./Presentation/presentationState";
 import {
   ArrowToolButton,
   DiamondToolButton,
@@ -179,6 +183,13 @@ const ExtraToolsDropdown = ({
           data-testid="toolbar-presentation"
         >
           {t("toolBar.presentation")}
+        </DropdownMenu.Item>
+        <DropdownMenu.Item
+          onSelect={() => openSlidesDialog(app)}
+          icon={listNumbersIcon}
+          data-testid="toolbar-slides"
+        >
+          {t("presentation.organize")}
         </DropdownMenu.Item>
         <DropdownMenu.Item
           onSelect={() => app.setActiveTool({ type: "bucketfill" })}

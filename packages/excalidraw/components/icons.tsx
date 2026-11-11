@@ -2566,6 +2566,42 @@ export const chevronDownIcon = createIcon(
   tablerIconProps,
 );
 
+//tabler-icons: list-numbers
+export const listNumbersIcon = createIcon(
+  <g strokeWidth="1.25">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M11 6h9" />
+    <path d="M11 12h9" />
+    <path d="M12 18h8" />
+    <path d="M4 16a2 2 0 1 1 4 0c0 .591 -.5 1 -1 1.5l-3 2.5h4" />
+    <path d="M6 10v-6l-2 2" />
+  </g>,
+  tablerIconProps,
+);
+
+//tabler-icons: grip-vertical
+export const gripVerticalIcon = createIcon(
+  <g strokeWidth="1.5">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M9 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+    <path d="M9 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+    <path d="M9 19m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+    <path d="M15 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+    <path d="M15 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+    <path d="M15 19m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+  </g>,
+  tablerIconProps,
+);
+
+//tabler-icons: chevron-up
+export const chevronUpIcon = createIcon(
+  <g strokeWidth="1.5">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <polyline points="6 15 12 9 18 15" />
+  </g>,
+  tablerIconProps,
+);
+
 //tabler-icons: chevron-left
 export const chevronLeft = createIcon(
   <g strokeWidth="1.5">

@@ -760,6 +760,13 @@
     "noFrames": "Adicione frames ao desenho para apresentá-los",
     "previous": "Frame anterior",
     "next": "Próximo frame",
-    "exit": "Sair da apresentação"
+    "exit": "Sair da apresentação",
+    "organize": "Organizar slides",
+    "slides": "Slides",
+    "reorderHint": "Arraste os slides (ou use as setas) para mudar a ordem da apresentação.",
+    "moveUp": "Mover para cima",
+    "moveDown": "Mover para baixo",
+    "alphabeticalOrder": "Voltar à ordem alfabética",
+    "present": "Apresentar"
   }
 }

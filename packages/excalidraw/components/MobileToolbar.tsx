@@ -30,13 +30,17 @@ import {
   EmbedIcon,
   laserPointerToolIcon,
   presentationIcon,
+  listNumbersIcon,
   drawShapeToolIcon,
   bucketFillIcon,
   mermaidLogoIcon,
   MagicIcon,
   stickyNoteToolIcon,
 } from "./icons";
-import { startPresentation } from "./Presentation/presentationState";
+import {
+  openSlidesDialog,
+  startPresentation,
+} from "./Presentation/presentationState";
 
 import "./ToolIcon.scss";
 import "./MobileToolbar.scss";
@@ -343,6 +347,13 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
             data-testid="toolbar-presentation"
           >
             {t("toolBar.presentation")}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() => openSlidesDialog(app)}
+            icon={listNumbersIcon}
+            data-testid="toolbar-slides"
+          >
+            {t("presentation.organize")}
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "bucketfill" })}
