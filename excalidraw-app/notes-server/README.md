@@ -2,7 +2,7 @@
 
 Servidor HTTP com o SQLite embutido do Node (`node:sqlite`). É a mesma API que a galeria e o editor usam, então scripts e agentes podem criar e ler notas por ela, sem controlar a interface.
 
-Nunca escreva direto no `notes.db`: o servidor mantém o banco aberto em modo WAL e as regras abaixo ficam em `notesApi.mts`.
+Nunca escreva direto no `notes.db`: o servidor mantém o banco aberto em modo WAL, e as regras abaixo ficam no código do servidor (`domain/` e `application/`).
 
 ## Onde o servidor roda
 
@@ -57,6 +57,26 @@ No `PUT`:
 | PUT | `/api/color-defaults/:slot` | `{ defaults: (string \| null)[] }` |
 
 A pasta de notas diárias (`kind: "daily"`) só aceita notas diárias e não pode ser renomeada nem apagada. Apagar uma pasta devolve as notas dela à raiz.
+
+## Organização do código
+
+```
+notes-server/
+├── notesApi.mts        monta as camadas: banco → repositórios → serviços → HTTP
+├── createServer.mts    servidor completo: arquivos do app + API
+├── server.mts          `yarn start:notes`
+├── domain/             tipos e regras, sem HTTP nem SQL
+├── application/        casos de uso (serviços) e as interfaces dos repositórios (`ports.mts`)
+├── infrastructure/
+│   └── sqlite/         banco (esquema, migrações, transações) e repositórios
+└── presentation/
+    └── http/           rotas, leitura do corpo, erros → status HTTP, arquivos estáticos
+```
+
+- `domain/` lança `NotFoundError`, `InvalidInputError` e `ForbiddenError`. `presentation/http/http.mts` converte esses erros em 404, 400 e 403.
+- `notesApi.mts` e `createServer.mts` são as entradas usadas pelo Vite (`vite.config.mts`), pelo app de macOS (`desktop/`) e pelos testes.
+- Os testes das rotas ficam em `excalidraw-app/tests/notesApi.test.ts`.
+- O Node roda estes arquivos removendo só os tipos. Por isso não use `enum`, `namespace` nem propriedades no construtor (`constructor(private x)`), e importe outros arquivos com a extensão `.mts`.
 
 ## Mudanças feitas por fora da interface
 
