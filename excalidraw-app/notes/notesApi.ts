@@ -45,7 +45,22 @@ export type NoteUpdate = {
   files?: BinaryFiles;
   /** PNG data URL, or `null` to clear */
   thumbnail?: string | null;
+  /** `updatedAt` of the version edited: refused (409) if it changed since */
+  baseUpdatedAt?: number;
 };
+
+/** an error answer of the notes API */
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/** the note changed elsewhere since the version the update was made on */
+export const isConflictError = (error: unknown) =>
+  error instanceof ApiError && error.status === 409;
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(`${API_URL}${path}`, {
@@ -56,7 +71,10 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     const { error } = await response
       .json()
       .catch(() => ({ error: response.statusText }));
-    throw new Error(error || `Request failed (${response.status})`);
+    throw new ApiError(
+      response.status,
+      error || `Request failed (${response.status})`,
+    );
   }
   return response.status === 204 ? (undefined as T) : response.json();
 };

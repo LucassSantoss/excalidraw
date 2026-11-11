@@ -7,6 +7,7 @@ import {
   DAILY_FOLDER_NAME,
 } from "../domain/folders.mts";
 import {
+  assertUpToDate,
   getCopyTitle,
   getDailyNoteTitle,
   getReferencedFileIds,
@@ -111,6 +112,7 @@ export const createNotesService = ({
 
   const update = (id: string, update: NoteUpdate) => {
     const note = find(id);
+    assertUpToDate(note, update.baseUpdatedAt);
     const folderId =
       update.folderId !== undefined
         ? parseFolderId(update.folderId, note.isDaily)

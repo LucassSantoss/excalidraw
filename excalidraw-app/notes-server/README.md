@@ -33,7 +33,7 @@ Não há autenticação: por padrão o servidor só aceita conexões da própria
 | DELETE | `/api/notes` | `{ ids: string[] }` | `{ deleted }`; apaga todas ou nenhuma |
 | POST | `/api/notes/daily` | `{ date: "YYYY-MM-DD", title? }` | resumo da nota do dia, criada se preciso |
 | GET | `/api/notes/:id` |  | resumo com `elements`, `appState` e `files` |
-| PUT | `/api/notes/:id` | `{ title?, folderId?, elements?, appState?, files?, thumbnail? }` | resumo atualizado |
+| PUT | `/api/notes/:id` | `{ title?, folderId?, elements?, appState?, files?, thumbnail?, baseUpdatedAt? }` | resumo atualizado; 409 se a nota mudou desde `baseUpdatedAt` |
 | DELETE | `/api/notes/:id` |  | 204 |
 | POST | `/api/notes/:id/duplicate` |  | 201, resumo da cópia |
 | GET | `/api/notes/:id/thumbnail` |  | PNG, ou 404 se não houver |
@@ -45,6 +45,7 @@ No `PUT`:
 - `files` só precisa trazer imagens novas. Um `id` que já existe na nota é ignorado.
 - `thumbnail` é um data URL PNG, ou `null` para limpar.
 - `folderId` move a nota e não altera `updatedAt`.
+- `baseUpdatedAt` é o `updatedAt` da versão em que as mudanças foram feitas. Se a nota mudou desde então, o `PUT` é recusado com 409 (`note was changed elsewhere`) e nada é gravado. Sem ele, o `PUT` sempre grava.
 
 ### Pastas, biblioteca e cores
 
@@ -83,7 +84,7 @@ notes-server/
 A interface não recebe aviso de alterações feitas pela API:
 
 - **Galeria:** busca a lista ao ser aberta e depois de cada ação feita nela. Uma nota criada por fora só aparece depois de recarregar (`Cmd+R`) ou de abrir e fechar outra nota.
-- **Editor:** a cena fica em memória. Ele não mostra um `PUT` externo, e a edição seguinte salva a cena da memória por cima dele. Por isso, não grave em uma nota que possa estar aberta: crie uma nova, ou peça para fechá-la antes e faça `GET`, altere os elementos e faça `PUT`.
+- **Editor:** a cena fica em memória e ele não mostra um `PUT` externo. Mas o editor salva com `baseUpdatedAt`: na edição seguinte, o servidor recusa o salvamento e o editor avisa que a nota foi alterada em outro lugar, com as opções de recarregar, salvar as alterações dele como cópia ou gravar por cima. Para evitar esse aviso, prefira criar uma nota nova ou gravar em notas fechadas.
 - **Miniatura:** é gerada pelo editor ao salvar uma alteração. Só abrir a nota não salva nada, então uma nota criada pela API fica sem miniatura até a primeira edição, a menos que o `PUT` envie `thumbnail`.
 
 ## Exemplo

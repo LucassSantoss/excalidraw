@@ -678,3 +678,61 @@ describe("notes API: database", () => {
     );
   });
 });
+
+describe("notes API: concurrent changes", () => {
+  it("refuses changes made on an outdated version of the note", async () => {
+    const note = await createNote({ title: "Shared" });
+    await tick();
+    // another window saves first
+    const other = (
+      await request("PUT", `/api/notes/${note.id}`, {
+        elements: [{ id: "theirs" }],
+        baseUpdatedAt: note.updatedAt,
+      })
+    ).body;
+    expect(other.updatedAt).toBeGreaterThan(note.updatedAt);
+
+    expect(
+      await request("PUT", `/api/notes/${note.id}`, {
+        elements: [{ id: "mine" }],
+        baseUpdatedAt: note.updatedAt,
+      }),
+    ).toMatchObject({
+      status: 409,
+      body: { error: "note was changed elsewhere" },
+    });
+    expect(
+      (await request("GET", `/api/notes/${note.id}`)).body.elements,
+    ).toEqual([{ id: "theirs" }]);
+
+    // up to date: saved
+    await tick();
+    expect(
+      (
+        await request("PUT", `/api/notes/${note.id}`, {
+          elements: [{ id: "mine" }],
+          baseUpdatedAt: other.updatedAt,
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  it("always writes without a base version, and validates it", async () => {
+    const note = await createNote();
+    await tick();
+    await request("PUT", `/api/notes/${note.id}`, { title: "Changed" });
+    expect(
+      (await request("PUT", `/api/notes/${note.id}`, { title: "Again" }))
+        .status,
+    ).toBe(200);
+    expect(
+      await request("PUT", `/api/notes/${note.id}`, {
+        title: "x",
+        baseUpdatedAt: "yesterday",
+      }),
+    ).toMatchObject({
+      status: 400,
+      body: { error: "baseUpdatedAt must be a number" },
+    });
+  });
+});
