@@ -1,0 +1,90 @@
+import { InvalidInputError } from "./errors.mts";
+
+/** a note as listed in the gallery (without its scene) */
+export type NoteSummary = {
+  id: string;
+  title: string;
+  /** `null`: not in any folder */
+  folderId: string | null;
+  /** created by "Nota de hoje"; the only notes allowed in the daily folder */
+  isDaily: boolean;
+  createdAt: number;
+  updatedAt: number;
+  hasThumbnail: boolean;
+};
+
+/** an image of the scene (`BinaryFileData`), stored apart from the elements */
+export type NoteFile = { id: string };
+
+export type Note = NoteSummary & {
+  elements: unknown[];
+  appState: Record<string, unknown>;
+  files: Record<string, unknown>;
+};
+
+/** changes to a note; each field sent replaces the stored value */
+export type NoteUpdate = {
+  title?: string;
+  /** moves the note (`null`: out of any folder); doesn't bump `updatedAt` */
+  folderId?: string | null;
+  elements?: unknown[];
+  appState?: Record<string, unknown>;
+  /** only new images are stored; ids the note already has are ignored */
+  files?: Record<string, NoteFile>;
+  /** PNG data URL, or `null` to clear */
+  thumbnail?: string | null;
+};
+
+const UNTITLED_NOTE_TITLE = "Sem título";
+const DAILY_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** title of a duplicated note */
+export const getCopyTitle = (title: string) =>
+  `${title || UNTITLED_NOTE_TITLE} (cópia)`;
+
+/** a daily note's date, YYYY-MM-DD (each day has a single daily note) */
+export const parseDailyDate = (date: unknown) => {
+  if (typeof date !== "string" || !DAILY_DATE_PATTERN.test(date)) {
+    throw new InvalidInputError("date must be YYYY-MM-DD");
+  }
+  return date;
+};
+
+/** a daily note is titled after its date unless a title is given */
+export const getDailyNoteTitle = (title: unknown, date: string) =>
+  typeof title === "string" && title.trim() ? title.trim() : date;
+
+/** the distinct ids of the notes to delete at once */
+export const parseNoteIds = (ids: unknown) => {
+  if (
+    !Array.isArray(ids) ||
+    !ids.length ||
+    !ids.every((id) => typeof id === "string")
+  ) {
+    throw new InvalidInputError("ids must be a non-empty array of note ids");
+  }
+  return [...new Set(ids as string[])];
+};
+
+/** the thumbnail image of a PNG data URL (`null`: no thumbnail) */
+export const parseThumbnail = (dataURL: string | null) => {
+  if (!dataURL) {
+    return null;
+  }
+  const match = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(dataURL);
+  if (!match) {
+    throw new InvalidInputError("invalid thumbnail");
+  }
+  return Buffer.from(match[3], match[2] ? "base64" : "utf8");
+};
+
+/**
+ * the images the scene still uses. Deleted elements are kept in the scene
+ * (for undo), so their images are kept too.
+ */
+export const getReferencedFileIds = (elements: unknown[]) =>
+  new Set(
+    elements
+      .map((element) => (element as { fileId?: string }).fileId)
+      .filter(Boolean),
+  );
