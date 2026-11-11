@@ -72,6 +72,16 @@
         color: var(--notes-primary);
       }
     }
+
+    // narrow screens: the title (or folder path) and the search each get a
+    // row of their own, the buttons wrap below them
+    @media (max-width: 600px) {
+      > h1,
+      > .notes-gallery__breadcrumb,
+      > .notes-gallery__search {
+        flex-basis: 100%;
+      }
+    }
   }
 
   &__breadcrumb {
@@ -98,6 +108,25 @@
       font-size: 1.75rem;
       font-weight: 700;
       line-height: inherit;
+    }
+
+    // narrow screens: a smaller path, and the folder name wraps instead of
+    // being cut off
+    @media (max-width: 600px) {
+      h1 {
+        font-size: 1.35rem;
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+
+      .notes-gallery__crumb {
+        font-size: 1.1rem;
+      }
+
+      > svg {
+        width: 1.1rem;
+        height: 1.1rem;
+      }
     }
   }
 
