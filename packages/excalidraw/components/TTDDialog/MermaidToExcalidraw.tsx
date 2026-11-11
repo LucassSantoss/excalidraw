@@ -66,6 +66,18 @@ const getErrorMessage = (error: unknown): string => {
   return "";
 };
 
+/** a link to the Mermaid syntax docs of a diagram type */
+const mermaidSyntaxLink = (page: string) => (el: React.ReactNode) =>
+  (
+    <a
+      href={`https://mermaid.js.org/syntax/${page}.html`}
+      target="_blank"
+      rel="noreferrer"
+    >
+      {el}
+    </a>
+  );
+
 const MermaidToExcalidraw = ({
   mermaidToExcalidrawLib,
   onRetryLoad,
@@ -117,6 +129,7 @@ const MermaidToExcalidraw = ({
           setError,
           mermaidDefinition: deferredText,
           theme,
+          renderEnvironment: app.renderEnvironment,
         });
 
         if (!result.success) {
@@ -134,7 +147,7 @@ const MermaidToExcalidraw = ({
       doRender();
       debouncedSaveMermaidDefinition(deferredText);
     }
-  }, [deferredText, mermaidToExcalidrawLib, isActive, theme]);
+  }, [deferredText, mermaidToExcalidrawLib, isActive, theme, app]);
 
   useEffect(() => {
     const flush = () => debouncedSaveMermaidDefinition.flush();
@@ -252,42 +265,14 @@ const MermaidToExcalidraw = ({
       <div className="ttd-dialog-desc">
         <Trans
           i18nKey="mermaid.description"
-          flowchartLink={(el) => (
-            <a
-              href="https://mermaid.js.org/syntax/flowchart.html"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {el}
-            </a>
-          )}
-          sequenceLink={(el) => (
-            <a
-              href="https://mermaid.js.org/syntax/sequenceDiagram.html"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {el}
-            </a>
-          )}
-          classLink={(el) => (
-            <a
-              href="https://mermaid.js.org/syntax/classDiagram.html"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {el}
-            </a>
-          )}
-          erdLink={(el) => (
-            <a
-              href="https://mermaid.js.org/syntax/entityRelationshipDiagram.html"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {el}
-            </a>
-          )}
+          flowchartLink={mermaidSyntaxLink("flowchart")}
+          sequenceLink={mermaidSyntaxLink("sequenceDiagram")}
+          classLink={mermaidSyntaxLink("classDiagram")}
+          stateLink={mermaidSyntaxLink("stateDiagram")}
+          erdLink={mermaidSyntaxLink("entityRelationshipDiagram")}
+          ganttLink={mermaidSyntaxLink("gantt")}
+          quadrantLink={mermaidSyntaxLink("quadrantChart")}
+          timelineLink={mermaidSyntaxLink("timeline")}
         />
       </div>
       <TTDDialogPanels>
