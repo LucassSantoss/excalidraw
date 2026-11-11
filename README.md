@@ -2,10 +2,13 @@
 
 Fork do [Excalidraw](https://github.com/excalidraw/excalidraw) com uma **galeria de notas salva em SQLite** e um **app nativo para macOS**. Tudo roda localmente, sem conta, nuvem ou plano pago.
 
-- **Galeria de notas**: cria, busca, renomeia, duplica e exclui notas, com miniatura de cada desenho
+- **Galeria de notas**: cria, busca, renomeia, duplica e exclui notas, com miniatura de cada desenho. Marque várias notas (Shift+clique seleciona um intervalo) para excluí-las de uma vez. A galeria se atualiza sozinha ao voltar para a janela
+- **Busca rápida** (`Cmd+O` no macOS, `Ctrl+O` nos outros sistemas, ou o botão de busca): procura em todas as notas, pelo título e pelo texto escrito nos desenhos, sem diferenciar maiúsculas nem acentos
 - **Pastas**: crie pastas e arraste as notas para dentro delas. Para tirar uma nota da pasta, arraste até "Minhas notas". Excluir uma pasta não apaga as notas; elas voltam para a raiz
 - **Nota diária**: o botão "Nota de hoje" cria (ou reabre) a nota do dia, com um título como "Sexta-feira, 23 de outubro de 2026", na pasta fixa **Notas Diárias**. Essa pasta só aceita notas diárias; as outras notas ficam nas demais pastas
-- **Salvamento automático** no SQLite enquanto você desenha, incluindo imagens coladas
+- **Salvamento automático** no SQLite enquanto você desenha, incluindo imagens coladas. Se a mesma nota for alterada em outro lugar (outra janela ou a API), o editor avisa e oferece recarregar, salvar como cópia ou manter a sua versão
+- **Apresentação** (menu `⋯` da barra de ferramentas): mostra os frames do desenho como slides, em tela cheia, a partir do slide em que você está. Em **Organizar slides**, arraste os slides para mudar a ordem ou exporte tudo como PDF
+- **Cores padrão**: clique com o botão direito numa cor da faixa do seletor de cores e escolha **Definir como cor padrão**; ela vale para as notas novas
 - **Biblioteca de formas** salva no mesmo banco e compartilhada entre as notas
 - **App para macOS** (Electron) que funciona offline
 
@@ -38,6 +41,8 @@ yarn --cwd desktop install    # dependências do app de macOS (Electron)
 
 O `yarn desktop:package` leva alguns minutos e, na primeira vez, baixa o Electron.
 
+> Depois de atualizar o código (`git pull`), rode `yarn install` antes de compilar: as dependências podem ter mudado. Sem isso, o build falha com erros de tipo em pacotes como o `@excalidraw/mermaid-to-excalidraw`.
+
 > O app é assinado só localmente (_ad-hoc_), sem certificado de desenvolvedor da Apple. No Mac onde foi gerado, ele abre normalmente. Em outro Mac, na primeira vez, clique com o botão direito no app e escolha **Abrir**.
 
 ## Onde ficam as notas
@@ -55,18 +60,35 @@ Para fazer **backup** ou levar as notas para outro Mac, copie o arquivo `notes.d
 
 | Pasta | Conteúdo |
 | --- | --- |
-| `excalidraw-app/notes/` | Galeria, editor com salvamento automático e biblioteca no SQLite (React) |
-| `excalidraw-app/notes-server/` | API local (`/api/notes`, `/api/library`) com o SQLite embutido do Node (`node:sqlite`) |
+| `excalidraw-app/notes/` | Galeria, editor com salvamento automático, busca rápida e biblioteca no SQLite (React) |
+| `excalidraw-app/notes-server/` | API local com o SQLite embutido do Node (`node:sqlite`), organizada em camadas. Rotas e organização no [README dela](excalidraw-app/notes-server/README.md) |
 | `desktop/` | App de macOS (Electron), que roda a API dentro do próprio app |
+| `packages/excalidraw/` | O editor do Excalidraw, com as mudanças do fork listadas abaixo |
 
 Links antigos do excalidraw.com (`#json=…`, `#room=…`) ainda abrem o app original do Excalidraw.
 
 ## Atualizar com o Excalidraw oficial
 
 ```bash
-git fetch upstream            # upstream = github.com/excalidraw/excalidraw
+git remote add upstream https://github.com/excalidraw/excalidraw.git   # só na primeira vez
+git fetch upstream
 git merge upstream/master
+yarn install                  # o oficial muda dependências com frequência
+yarn test:typecheck && yarn test:update
 ```
+
+O fork mexe em alguns arquivos do editor (`packages/excalidraw/`), e é neles que os conflitos costumam aparecer:
+
+- `components/Presentation/`: apresentação, organizar slides e PDF (código só do fork)
+- `components/LayerUI.tsx`, `components/Toolbar.tsx`, `components/MobileToolbar.tsx`: entradas da apresentação na interface e no menu `⋯`
+- `components/ColorPicker/` e `components/TopPicksDnD/TopPicksContextMenu.tsx`: cores padrão
+- `components/App.viewport.ts` (`cancelTransition` público), `components/icons.tsx`, `index.tsx` e `types.ts` (props `colorTopPicksDefaults` e `onColorTopPicksDefaultsChange`)
+- `locales/en.json` e `locales/pt-BR.json`: textos novos
+- Fora do editor: `excalidraw-app/vite.config.mts` (a API de notas no servidor do Vite) e `excalidraw-app/index.tsx`
+
+## Integração contínua
+
+Os workflows do GitHub Actions rodam no Node 24, porque o Node 20 não tem `node:sqlite`. Os títulos de PR seguem o padrão do oficial, com tipo e escopo, por exemplo `feat(app): …`, `fix(editor): …` ou `ci(repo): …`.
 
 ---
 

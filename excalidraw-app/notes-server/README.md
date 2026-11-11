@@ -80,8 +80,8 @@ notes-server/
     └── http/           rotas, leitura do corpo, erros → status HTTP, arquivos estáticos
 ```
 
-- `domain/` lança `NotFoundError`, `InvalidInputError` e `ForbiddenError`. `presentation/http/http.mts` converte esses erros em 404, 400 e 403.
-- `notesApi.mts` e `createServer.mts` são as entradas usadas pelo Vite (`vite.config.mts`), pelo app de macOS (`desktop/`) e pelos testes.
+- `domain/` lança `NotFoundError`, `InvalidInputError`, `ForbiddenError` e `ConflictError`. `presentation/http/http.mts` converte esses erros em 404, 400, 403 e 409.
+- `notesApi.mts` e `createServer.mts` são as entradas usadas pelo Vite (`vite.config.mts`), pelo app de macOS (`desktop/`) e pelos testes. O Vite só carrega a API ao servir o app: o build não depende do banco nem do `node:sqlite`.
 - Os testes das rotas ficam em `excalidraw-app/tests/notesApi.test.ts`.
 - O Node roda estes arquivos removendo só os tipos. Por isso não use `enum`, `namespace` nem propriedades no construtor (`constructor(private x)`), e importe outros arquivos com a extensão `.mts`.
 
@@ -89,7 +89,7 @@ notes-server/
 
 A interface não recebe aviso de alterações feitas pela API:
 
-- **Galeria:** busca a lista ao ser aberta e depois de cada ação feita nela. Uma nota criada por fora só aparece depois de recarregar (`Cmd+R`) ou de abrir e fechar outra nota.
+- **Galeria:** busca a lista ao ser aberta, depois de cada ação feita nela e quando a janela volta ao foco. Uma nota criada por fora aparece quando você volta para o app, sem recarregar.
 - **Editor:** a cena fica em memória e ele não mostra um `PUT` externo. Mas o editor salva com `baseUpdatedAt`: na edição seguinte, o servidor recusa o salvamento e o editor avisa que a nota foi alterada em outro lugar, com as opções de recarregar, salvar as alterações dele como cópia ou gravar por cima. Para evitar esse aviso, prefira criar uma nota nova ou gravar em notas fechadas.
 - **Miniatura:** é gerada pelo editor ao fechar uma nota alterada e, para as notas com `needsThumbnail`, pela galeria, em segundo plano. Uma nota criada pela API ganha miniatura assim que a galeria é aberta, sem precisar enviar `thumbnail`.
 
@@ -117,5 +117,6 @@ Os elementos seguem os tipos de `packages/element/src/types.ts` e são normaliza
 - **Texto dentro de forma:** o texto tem `containerId` apontando para a forma, e a forma lista `{ id, type: "text" }` em `boundElements`.
 - **Setas ligadas:** `startBinding` e `endBinding` são `{ elementId, fixedPoint: [fx, fy], mode: "orbit" }`, com `fx` e `fy` entre 0 e 1. A forma lista `{ id, type: "arrow" }` em `boundElements`.
 - **`index`:** pode ser `null`; o índice é recalculado ao carregar.
+- **Slides:** cada `frame` (com `name`) é um slide da apresentação. A ordem é a do `name`, alfabética e numérica ("Slide 2" antes de "Slide 10"), a menos que os frames tragam `customData: { presentationOrder: 0 }`, `1`, `2`…; os frames sem esse campo vêm depois, por nome. Os elementos de um slide têm `frameId` apontando para o frame.
 
 Ao mudar rotas ou esses comportamentos, atualize este arquivo.
