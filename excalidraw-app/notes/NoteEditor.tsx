@@ -9,7 +9,7 @@ import {
   useHandleLibrary,
 } from "@excalidraw/excalidraw";
 import { clearAppStateForLocalStorage } from "@excalidraw/excalidraw/appState";
-import { gridIcon } from "@excalidraw/excalidraw/components/icons";
+import { gridIcon, searchIcon } from "@excalidraw/excalidraw/components/icons";
 import clsx from "clsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -32,6 +32,7 @@ import {
 } from "./libraryAdapters";
 import { colorDefaultsApi, isConflictError, notesApi } from "./notesApi";
 
+import { QUICK_SEARCH_SHORTCUT } from "./QuickSearch";
 import { renderThumbnail } from "./thumbnail";
 
 import "./NoteEditor.scss";
@@ -378,9 +379,12 @@ const useColorTopPicksDefaults = () => {
 export const NoteEditor = ({
   noteId,
   onClose,
+  onOpenSearch,
 }: {
   noteId: string;
   onClose: () => void;
+  /** opens the search across every note (`QuickSearch`) */
+  onOpenSearch: () => void;
 }) => {
   const excalidrawAPI = useExcalidrawAPI();
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
@@ -649,6 +653,15 @@ export const NoteEditor = ({
             >
               {isMobile ? "" : SAVE_STATUS_LABELS[saver.status]}
             </span>
+            <button
+              type="button"
+              className="note-editor__back"
+              onClick={onOpenSearch}
+              title={`Buscar notas (${QUICK_SEARCH_SHORTCUT})`}
+              aria-label="Buscar notas"
+            >
+              {searchIcon}
+            </button>
             <button
               type="button"
               className="note-editor__back"

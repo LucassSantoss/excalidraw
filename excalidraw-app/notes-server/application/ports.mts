@@ -7,6 +7,7 @@ import type { ColorDefaults } from "../domain/colorDefaults.mts";
 import type { Folder } from "../domain/folders.mts";
 import type { Library } from "../domain/library.mts";
 import type { Note, NoteFile, NoteSummary } from "../domain/notes.mts";
+import type { SearchableNote } from "../domain/search.mts";
 
 export interface NotesRepository {
   /** most recently updated first */
@@ -45,6 +46,8 @@ export interface NotesRepository {
   delete(id: string): void;
   /** doesn't bump `updatedAt` (the scene didn't change) */
   saveThumbnail(id: string, thumbnail: Uint8Array | null): void;
+  /** every note, with the text written in its drawing */
+  listSearchable(): SearchableNote[];
   /** `null` if the note or its thumbnail doesn't exist */
   findThumbnail(id: string): Uint8Array | null;
 }

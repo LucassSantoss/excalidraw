@@ -12,6 +12,10 @@ import type { NotesService } from "../../application/notesService.mts";
 export const createNotesRoutes =
   (notes: NotesService) =>
   async ({ req, res, method, id, action }: RouteRequest) => {
+    if (id === "search" && !action && method === "GET") {
+      const query = new URL(req.url ?? "/", "http://localhost").searchParams;
+      return sendJSON(res, 200, notes.search(query.get("q")));
+    }
     if (id === "daily" && !action && method === "POST") {
       const body = await readJSONBody(req);
       return sendJSON(res, 200, notes.getOrCreateDaily(body.date, body.title));

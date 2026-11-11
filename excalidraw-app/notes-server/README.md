@@ -31,6 +31,7 @@ Não há autenticação: por padrão o servidor só aceita conexões da própria
 | GET | `/api/notes` |  | resumos, do mais recente ao mais antigo |
 | POST | `/api/notes` | `{ title?, folderId? }` | 201, resumo da nota vazia |
 | DELETE | `/api/notes` | `{ ids: string[] }` | `{ deleted }`; apaga todas ou nenhuma |
+| GET | `/api/notes/search?q=` |  | até 30 resumos com `matchedIn` (`title`, `content` ou `null`) e `snippet`; sem `q`, as notas mais recentes |
 | POST | `/api/notes/daily` | `{ date: "YYYY-MM-DD", title? }` | resumo da nota do dia, criada se preciso |
 | GET | `/api/notes/:id` |  | resumo com `elements`, `appState` e `files` |
 | PUT | `/api/notes/:id` | `{ title?, folderId?, elements?, appState?, files?, thumbnail?, baseUpdatedAt? }` | resumo atualizado; 409 se a nota mudou desde `baseUpdatedAt` |
@@ -40,6 +41,8 @@ Não há autenticação: por padrão o servidor só aceita conexões da própria
 | PUT | `/api/notes/:id/thumbnail` | `{ thumbnail, baseUpdatedAt? }` | resumo; grava só a miniatura, sem alterar `updatedAt` |
 
 Os resumos trazem `hasThumbnail`, `needsThumbnail` (a cena mudou sem miniatura nova, como num `PUT` de `elements` sem `thumbnail`) e `thumbnailVersion` (aumenta a cada miniatura salva; a interface usa na URL da imagem).
+
+A busca procura cada palavra de `q` no título e nos textos do desenho (textos e nomes de frames, sem os apagados), sem diferenciar maiúsculas nem acentos. Os títulos que contêm `q` vêm primeiro, depois os que contêm todas as palavras, depois as notas encontradas pelo conteúdo, e dentro de cada grupo as mais recentes.
 
 No `PUT`:
 

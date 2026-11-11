@@ -846,3 +846,99 @@ describe("notes API: thumbnails to render", () => {
     ).toBe(404);
   });
 });
+
+describe("notes API: search", () => {
+  const text = (id: string, value: string, extra = {}) => ({
+    id,
+    type: "text",
+    text: value,
+    originalText: value,
+    ...extra,
+  });
+
+  const createDrawnNote = async (title: string, elements: unknown[]) => {
+    const note = await createNote({ title });
+    await request("PUT", `/api/notes/${note.id}`, { elements });
+    await tick();
+    return note;
+  };
+
+  const search = async (q: string) =>
+    (await request("GET", `/api/notes/search?q=${encodeURIComponent(q)}`))
+      .body as {
+      title: string;
+      matchedIn: string | null;
+      snippet: string | null;
+    }[];
+
+  it("finds notes by title and by the text in their drawings", async () => {
+    await createDrawnNote("Reunião de equipe", [text("a", "pauta")]);
+    await createDrawnNote("Ideias", [
+      text("b", "Uma reunião com o cliente sobre o orçamento do projeto"),
+      { id: "f", type: "frame", name: "Slide da reunião" },
+    ]);
+    await createDrawnNote("Compras", [text("c", "leite, pão")]);
+
+    // case and accents don't matter; titles first
+    expect(
+      (await search("REUNIAO")).map(({ title, matchedIn }) => [
+        title,
+        matchedIn,
+      ]),
+    ).toEqual([
+      ["Reunião de equipe", "title"],
+      ["Ideias", "content"],
+    ]);
+    const [, content] = await search("reuniao");
+    expect(content.snippet).toBe(
+      // the drawing's texts, one after the other
+      "Uma reunião com o cliente sobre o orçamento do projeto Slide da reunião",
+    );
+
+    // every word has to match, in the title or the drawing
+    expect((await search("ideias orcamento")).map((r) => r.title)).toEqual([
+      "Ideias",
+    ]);
+    expect(await search("ideias leite")).toEqual([]);
+    // frame names count as text
+    expect((await search("slide")).map((r) => r.title)).toEqual(["Ideias"]);
+  });
+
+  it("ignores deleted text and follows the drawing's changes", async () => {
+    const note = await createDrawnNote("Nota", [
+      text("a", "segredo", { isDeleted: true }),
+    ]);
+    expect(await search("segredo")).toEqual([]);
+
+    await request("PUT", `/api/notes/${note.id}`, {
+      elements: [text("a", "segredo revelado")],
+    });
+    expect((await search("revelado")).map((r) => r.title)).toEqual(["Nota"]);
+    const copy = (await request("POST", `/api/notes/${note.id}/duplicate`))
+      .body;
+    expect((await search("revelado")).map((r) => r.title)).toEqual([
+      copy.title,
+      "Nota",
+    ]);
+  });
+
+  it("lists the most recent notes without a query", async () => {
+    await createNote({ title: "Velha" });
+    await tick();
+    await createNote({ title: "Nova" });
+    const results = await search("");
+    expect(results.map((r) => r.title)).toEqual(["Nova", "Velha"]);
+    expect(results[0]).toMatchObject({ matchedIn: null, snippet: null });
+  });
+
+  it("indexes the drawings of existing databases", async () => {
+    await stopServer();
+    const old = new DatabaseSync(dbFile);
+    old.exec(`ALTER TABLE notes DROP COLUMN content_text`);
+    old.exec(`INSERT INTO notes (id, title, elements, created_at, updated_at)
+      VALUES ('old', 'Antiga', '[{"id":"t","type":"text","text":"tesouro"}]', 1, 1)`);
+    old.close();
+    await startServer();
+    expect((await search("tesouro")).map((r) => r.title)).toEqual(["Antiga"]);
+  });
+});

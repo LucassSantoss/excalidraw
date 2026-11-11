@@ -20,6 +20,7 @@ import {
 } from "./icons";
 import { foldersApi, notesApi } from "./notesApi";
 import { usePromptDialog } from "./PromptDialog";
+import { QUICK_SEARCH_SHORTCUT } from "./QuickSearch";
 import { renderThumbnail } from "./thumbnail";
 
 import "./NotesGallery.scss";
@@ -235,11 +236,14 @@ export const NotesGallery = ({
   folderId,
   onOpenNote,
   onOpenFolder,
+  onOpenSearch,
 }: {
   /** folder being browsed (`null`: root) */
   folderId: string | null;
   onOpenNote: (note: NoteSummary) => void;
   onOpenFolder: (folderId: string | null) => void;
+  /** opens the search across every note (`QuickSearch`) */
+  onOpenSearch: () => void;
 }) => {
   const { editorTheme } = useHandleAppTheme();
   const [notes, setNotes] = useState<NoteSummary[] | null>(null);
@@ -624,6 +628,16 @@ export const NotesGallery = ({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
+          <button
+            type="button"
+            className="notes-gallery__quick-search"
+            onClick={onOpenSearch}
+            title="Buscar em todas as notas, pelo título ou pelo conteúdo"
+          >
+            <kbd>{QUICK_SEARCH_SHORTCUT}</kbd>
+            {/* touch screens: no keyboard to hint at */}
+            <span>Buscar em tudo</span>
+          </button>
         </label>
         <button
           type="button"

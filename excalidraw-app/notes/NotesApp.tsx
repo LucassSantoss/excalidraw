@@ -3,11 +3,13 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 
 import { Provider, appJotaiStore } from "../app-jotai";
 import { TopErrorBoundary } from "../components/TopErrorBoundary";
+import { useHandleAppTheme } from "../useHandleAppTheme";
 
 import "../index.scss";
 
 import { NoteEditor } from "./NoteEditor";
 import { NotesGallery } from "./NotesGallery";
+import { isQuickSearchShortcut, QuickSearch } from "./QuickSearch";
 
 // the original excalidraw.com app, still used for `#json=` / `#room=` links
 const ExcalidrawApp = lazy(() => import("../App"));
@@ -62,6 +64,24 @@ export const NotesApp = () => {
 
   const openGallery = useCallback(() => navigate({ note: null }), []);
 
+  // Cmd+O (macOS) / Ctrl+O: search every note, from the gallery or a note.
+  // Captured before the editor, where it would open a file
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const openSearch = useCallback(() => setIsSearchOpen(true), []);
+  const { editorTheme } = useHandleAppTheme();
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isQuickSearchShortcut(event)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, []);
+
   if (!noteId && isLegacyAppURL()) {
     return (
       <Suspense fallback={null}>
@@ -75,13 +95,25 @@ export const NotesApp = () => {
       <Provider store={appJotaiStore}>
         {noteId ? (
           <ExcalidrawAPIProvider key={noteId}>
-            <NoteEditor noteId={noteId} onClose={openGallery} />
+            <NoteEditor
+              noteId={noteId}
+              onClose={openGallery}
+              onOpenSearch={openSearch}
+            />
           </ExcalidrawAPIProvider>
         ) : (
           <NotesGallery
             folderId={folderId}
             onOpenNote={openNote}
             onOpenFolder={openFolder}
+            onOpenSearch={openSearch}
+          />
+        )}
+        {isSearchOpen && (
+          <QuickSearch
+            theme={editorTheme}
+            onOpenNote={openNote}
+            onClose={() => setIsSearchOpen(false)}
           />
         )}
       </Provider>

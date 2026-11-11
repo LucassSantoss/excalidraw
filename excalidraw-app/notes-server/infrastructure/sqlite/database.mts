@@ -8,6 +8,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { DAILY_FOLDER_KIND } from "../../domain/folders.mts";
+import { extractNoteText } from "../../domain/search.mts";
 
 import type { RunInTransaction } from "../../application/ports.mts";
 
@@ -84,6 +85,19 @@ export const openDatabase = (dbFile: string) => {
       DEFAULT 0`);
     db.exec(`UPDATE notes SET thumbnail_stale = 1
       WHERE thumbnail IS NULL AND elements <> '[]'`);
+  }
+  if (!noteColumns.has("content_text")) {
+    // the text written in the drawing, for searching notes
+    db.exec(`ALTER TABLE notes ADD COLUMN content_text TEXT NOT NULL
+      DEFAULT ''`);
+    const setContentText = db.prepare(
+      `UPDATE notes SET content_text = ? WHERE id = ?`,
+    );
+    for (const { id, elements } of db
+      .prepare(`SELECT id, elements FROM notes`)
+      .all() as { id: string; elements: string }[]) {
+      setContentText.run(extractNoteText(JSON.parse(elements)), id);
+    }
   }
   if (!noteColumns.has("thumbnail_version")) {
     // bumped with each thumbnail saved, so clients don't show a cached one
