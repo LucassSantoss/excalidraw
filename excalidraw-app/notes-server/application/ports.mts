@@ -43,6 +43,8 @@ export interface NotesRepository {
   addFiles(id: string, files: NoteFile[]): void;
   removeFilesExcept(id: string, keptFileIds: Set<unknown>): void;
   delete(id: string): void;
+  /** doesn't bump `updatedAt` (the scene didn't change) */
+  saveThumbnail(id: string, thumbnail: Uint8Array | null): void;
   /** `null` if the note or its thumbnail doesn't exist */
   findThumbnail(id: string): Uint8Array | null;
 }

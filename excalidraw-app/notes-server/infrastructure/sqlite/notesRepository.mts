@@ -11,6 +11,8 @@ type NoteRow = {
   created_at: number;
   updated_at: number;
   has_thumbnail: number;
+  thumbnail_stale: number;
+  thumbnail_version: number;
 };
 
 type NoteSceneRow = NoteRow & { elements: string; app_state: string };
@@ -18,7 +20,7 @@ type NoteSceneRow = NoteRow & { elements: string; app_state: string };
 type FileRow = { id: string; data: string };
 
 const SUMMARY_COLUMNS = `id, title, folder_id, daily_date, created_at, updated_at,
-  thumbnail IS NOT NULL AS has_thumbnail`;
+  thumbnail IS NOT NULL AS has_thumbnail, thumbnail_stale, thumbnail_version`;
 
 const toNoteSummary = (row: NoteRow): NoteSummary => ({
   id: row.id,
@@ -28,6 +30,8 @@ const toNoteSummary = (row: NoteRow): NoteSummary => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
   hasThumbnail: !!row.has_thumbnail,
+  needsThumbnail: !!row.thumbnail_stale,
+  thumbnailVersion: row.thumbnail_version,
 });
 
 /** the stored column of each updatable field */
@@ -60,6 +64,11 @@ export const createNotesRepository = (db: DatabaseSync): NotesRepository => {
      SELECT ?, ?, elements, app_state, thumbnail, ?, NULL, ?, ?
      FROM notes WHERE id = ?`,
   );
+  const copyThumbnailStale = db.prepare(
+    `UPDATE notes SET thumbnail_stale =
+       (SELECT thumbnail_stale FROM notes WHERE id = ?)
+     WHERE id = ?`,
+  );
   const copyFiles = db.prepare(
     `INSERT OR IGNORE INTO note_files (note_id, id, data)
      SELECT ?, id, data FROM note_files WHERE note_id = ?`,
@@ -77,6 +86,11 @@ export const createNotesRepository = (db: DatabaseSync): NotesRepository => {
   );
   const deleteNote = db.prepare(`DELETE FROM notes WHERE id = ?`);
   const findThumbnail = db.prepare(`SELECT thumbnail FROM notes WHERE id = ?`);
+  const saveThumbnail = db.prepare(
+    `UPDATE notes SET thumbnail = ?, thumbnail_stale = 0,
+       thumbnail_version = thumbnail_version + 1
+     WHERE id = ?`,
+  );
 
   return {
     list: () => (list.all() as NoteRow[]).map(toNoteSummary),
@@ -107,6 +121,7 @@ export const createNotesRepository = (db: DatabaseSync): NotesRepository => {
     },
     insertCopy: (sourceId, { id, title, folderId, now }) => {
       insertCopy.run(id, title, folderId, now, now, sourceId);
+      copyThumbnailStale.run(sourceId, id);
       copyFiles.run(id, sourceId);
     },
     update: (id, fields, now) => {
@@ -123,6 +138,16 @@ export const createNotesRepository = (db: DatabaseSync): NotesRepository => {
             ? JSON.stringify(value)
             : (value as string | Uint8Array | null),
         );
+      }
+      // the thumbnail is up to date when sent, outdated when the scene
+      // changes without one
+      if (fields.thumbnail !== undefined) {
+        assignments.push(
+          "thumbnail_stale = 0",
+          "thumbnail_version = thumbnail_version + 1",
+        );
+      } else if (fields.elements !== undefined) {
+        assignments.push("thumbnail_stale = 1");
       }
       db.prepare(
         `UPDATE notes SET ${assignments.join(", ")}, updated_at = ?
@@ -146,6 +171,9 @@ export const createNotesRepository = (db: DatabaseSync): NotesRepository => {
     },
     delete: (id) => {
       deleteNote.run(id);
+    },
+    saveThumbnail: (id, thumbnail) => {
+      saveThumbnail.run(thumbnail, id);
     },
     findThumbnail: (id) =>
       (findThumbnail.get(id) as { thumbnail: Uint8Array | null } | undefined)

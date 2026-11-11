@@ -37,6 +37,9 @@ Não há autenticação: por padrão o servidor só aceita conexões da própria
 | DELETE | `/api/notes/:id` |  | 204 |
 | POST | `/api/notes/:id/duplicate` |  | 201, resumo da cópia |
 | GET | `/api/notes/:id/thumbnail` |  | PNG, ou 404 se não houver |
+| PUT | `/api/notes/:id/thumbnail` | `{ thumbnail, baseUpdatedAt? }` | resumo; grava só a miniatura, sem alterar `updatedAt` |
+
+Os resumos trazem `hasThumbnail`, `needsThumbnail` (a cena mudou sem miniatura nova, como num `PUT` de `elements` sem `thumbnail`) e `thumbnailVersion` (aumenta a cada miniatura salva; a interface usa na URL da imagem).
 
 No `PUT`:
 
@@ -85,7 +88,7 @@ A interface não recebe aviso de alterações feitas pela API:
 
 - **Galeria:** busca a lista ao ser aberta e depois de cada ação feita nela. Uma nota criada por fora só aparece depois de recarregar (`Cmd+R`) ou de abrir e fechar outra nota.
 - **Editor:** a cena fica em memória e ele não mostra um `PUT` externo. Mas o editor salva com `baseUpdatedAt`: na edição seguinte, o servidor recusa o salvamento e o editor avisa que a nota foi alterada em outro lugar, com as opções de recarregar, salvar as alterações dele como cópia ou gravar por cima. Para evitar esse aviso, prefira criar uma nota nova ou gravar em notas fechadas.
-- **Miniatura:** é gerada pelo editor ao fechar uma nota que foi alterada (voltar para a galeria, botão voltar, fechar o app de macOS), e não a cada salvamento. Uma nota criada pela API fica sem miniatura até ser aberta, alterada e fechada no editor, a menos que o `PUT` envie `thumbnail`.
+- **Miniatura:** é gerada pelo editor ao fechar uma nota alterada e, para as notas com `needsThumbnail`, pela galeria, em segundo plano. Uma nota criada pela API ganha miniatura assim que a galeria é aberta, sem precisar enviar `thumbnail`.
 
 ## Exemplo
 

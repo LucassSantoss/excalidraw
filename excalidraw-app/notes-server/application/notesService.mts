@@ -160,8 +160,29 @@ export const createNotesService = ({
     return { deleted: ids.length };
   };
 
+  /**
+   * saves the thumbnail rendered for the scene of `baseUpdatedAt` (refused if
+   * the note changed since), without bumping `updatedAt`
+   */
+  const saveThumbnail = (
+    id: string,
+    {
+      thumbnail,
+      baseUpdatedAt,
+    }: Pick<NoteUpdate, "thumbnail" | "baseUpdatedAt">,
+  ) => {
+    const note = find(id);
+    assertUpToDate(note, baseUpdatedAt);
+    if (thumbnail === undefined) {
+      throw new InvalidInputError("thumbnail is required");
+    }
+    notes.saveThumbnail(id, parseThumbnail(thumbnail));
+    return find(id);
+  };
+
   return {
     list: () => notes.list(),
+    saveThumbnail,
     load: (id: string) => {
       const note = notes.findWithScene(id);
       if (!note) {

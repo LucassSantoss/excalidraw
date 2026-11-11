@@ -7,7 +7,7 @@ import {
   searchIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import clsx from "clsx";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useHandleAppTheme } from "../useHandleAppTheme";
 
@@ -20,6 +20,7 @@ import {
 } from "./icons";
 import { foldersApi, notesApi } from "./notesApi";
 import { usePromptDialog } from "./PromptDialog";
+import { renderThumbnail } from "./thumbnail";
 
 import "./NotesGallery.scss";
 
@@ -69,6 +70,52 @@ const isNoteDrag = (event: React.DragEvent) =>
 /** the daily notes folder only holds daily notes */
 const canMoveNoteTo = (note: NoteSummary, folder: Folder | null) =>
   folder?.kind !== "daily" || note.isDaily;
+
+/**
+ * Renders, in the background and one at a time, the thumbnails notes need:
+ * their scene changed without one, e.g. created through the API, or closed
+ * before the editor could save it. Each version of a note is tried once.
+ */
+const useMissingThumbnails = (
+  notes: NoteSummary[] | null,
+  onRendered: (note: NoteSummary) => void,
+) => {
+  const triedRef = useRef(new Map<string, number>());
+  const isRunningRef = useRef(false);
+  // re-checks the notes once a run is over (they may have changed meanwhile)
+  const [runs, setRuns] = useState(0);
+
+  useEffect(() => {
+    const queue = (notes ?? []).filter(
+      (note) =>
+        note.needsThumbnail && triedRef.current.get(note.id) !== note.updatedAt,
+    );
+    if (!queue.length || isRunningRef.current) {
+      return;
+    }
+    isRunningRef.current = true;
+    (async () => {
+      for (const summary of queue) {
+        triedRef.current.set(summary.id, summary.updatedAt);
+        try {
+          const note = await notesApi.get(summary.id);
+          const thumbnail = await renderThumbnail(note);
+          // refused if the note changed since: its next version is tried
+          onRendered(
+            await notesApi.saveThumbnail(note.id, thumbnail, note.updatedAt),
+          );
+        } catch (error) {
+          console.error(
+            `Failed to render the thumbnail of ${summary.id}`,
+            error,
+          );
+        }
+      }
+      isRunningRef.current = false;
+      setRuns((runs) => runs + 1);
+    })();
+  }, [notes, onRendered, runs]);
+};
 
 const NoteCard = ({
   note,
@@ -141,7 +188,7 @@ const NoteCard = ({
           draggable={false}
         />
       ) : (
-        <span>Nota vazia</span>
+        <span>{note.needsThumbnail ? "Gerando miniatura…" : "Nota vazia"}</span>
       )}
     </button>
     <div className="notes-gallery__info">
@@ -223,6 +270,19 @@ export const NotesGallery = ({
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useMissingThumbnails(
+    notes,
+    useCallback(
+      (rendered: NoteSummary) =>
+        setNotes(
+          (notes) =>
+            notes?.map((note) => (note.id === rendered.id ? rendered : note)) ??
+            null,
+        ),
+      [],
+    ),
+  );
 
   // notes may change elsewhere (the API, another window): refresh when the
   // gallery comes back into view. `focus` and `visibilitychange` often fire
