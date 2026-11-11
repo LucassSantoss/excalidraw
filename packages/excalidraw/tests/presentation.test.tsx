@@ -1,12 +1,14 @@
 import React from "react";
 
 import { KEYS } from "@excalidraw/common";
+import { CaptureUpdateAction } from "@excalidraw/element";
 
 import { Excalidraw } from "../index";
 import { editorJotaiStore } from "../editor-jotai";
 import {
   getPresentationFrames,
   getStartSlideIndex,
+  setSlideOrder,
   presentationAtom,
   startPresentation,
 } from "../components/Presentation/presentationState";
@@ -255,5 +257,93 @@ describe("presentation: starting slide", () => {
 
     act(() => startPresentation(h.app));
     expect(currentFrameId()).toBe(second.id);
+  });
+});
+
+describe("presentation: slide order", () => {
+  beforeEach(async () => {
+    mockBoundingClientRect();
+    await render(<Excalidraw handleKeyboardGlobally={true} />);
+    await waitFor(() => expect(h.state.width).toBe(200));
+  });
+
+  afterEach(() => {
+    restoreOriginalGetBoundingClientRect();
+  });
+
+  const order = () =>
+    getPresentationFrames(h.app.scene.getNonDeletedFramesLikes()).map(
+      (frame) => frame.name,
+    );
+
+  it("follows the order set, then sorts new frames by name", () => {
+    API.setElements([
+      createFrame("B", 0),
+      createFrame("A", 200),
+      createFrame("C", 400),
+    ]);
+    expect(order()).toEqual(["A", "B", "C"]);
+
+    const [a, b, c] = getPresentationFrames(
+      h.app.scene.getNonDeletedFramesLikes(),
+    );
+    act(() => setSlideOrder(h.app, [c.id, a.id, b.id]));
+    expect(order()).toEqual(["C", "A", "B"]);
+
+    // a frame added since goes last
+    API.setElements([...h.elements, createFrame("0", 600)]);
+    expect(order()).toEqual(["C", "A", "B", "0"]);
+
+    act(() => setSlideOrder(h.app, null));
+    expect(order()).toEqual(["0", "A", "B", "C"]);
+    expect(
+      h.app.scene
+        .getNonDeletedFramesLikes()
+        .every((frame) => !("presentationOrder" in (frame.customData ?? {}))),
+    ).toBe(true);
+  });
+
+  it("is an undoable change of the drawing", () => {
+    // drawn: part of the history
+    API.updateScene({
+      elements: [createFrame("A", 0), createFrame("B", 200)],
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    });
+    const [a, b] = getPresentationFrames(
+      h.app.scene.getNonDeletedFramesLikes(),
+    );
+    act(() => setSlideOrder(h.app, [b.id, a.id]));
+    expect(order()).toEqual(["B", "A"]);
+
+    Keyboard.withModifierKeys({ ctrl: true }, () => {
+      Keyboard.keyPress(KEYS.Z);
+    });
+    expect(order()).toEqual(["A", "B"]);
+  });
+
+  it("is changed from the slides dialog", async () => {
+    API.setElements([createFrame("A", 0), createFrame("B", 200)]);
+    const { container, getByTestId, findAllByRole, findByText } =
+      GlobalTestState.renderResult;
+
+    fireEvent.click(
+      container.querySelector(".App-toolbar__extra-tools-trigger")!,
+    );
+    fireEvent.click(await waitFor(() => getByTestId("toolbar-slides")));
+    await findByText(
+      "Drag the slides (or use the arrows) to change the order of the presentation.",
+    );
+
+    const [moveADown] = (await findAllByRole("button", {
+      name: /Move down/,
+    })) as HTMLButtonElement[];
+    fireEvent.click(moveADown);
+    expect(order()).toEqual(["B", "A"]);
+    expect(
+      // the dialog is rendered in a portal
+      [...document.querySelectorAll(".SlidesDialog__title")].map(
+        (title) => title.textContent,
+      ),
+    ).toEqual(["B", "A"]);
   });
 });

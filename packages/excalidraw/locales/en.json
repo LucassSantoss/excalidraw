@@ -790,6 +790,13 @@
     "noFrames": "Add frames to the drawing to present them",
     "previous": "Previous frame",
     "next": "Next frame",
-    "exit": "Exit presentation"
+    "exit": "Exit presentation",
+    "organize": "Organize slides",
+    "slides": "Slides",
+    "reorderHint": "Drag the slides (or use the arrows) to change the order of the presentation.",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "alphabeticalOrder": "Back to alphabetical order",
+    "present": "Present"
   }
 }

@@ -1,4 +1,9 @@
-import { getFrameLikeTitle, isFrameLikeElement } from "@excalidraw/element";
+import {
+  CaptureUpdateAction,
+  getFrameLikeTitle,
+  isFrameLikeElement,
+  newElementWith,
+} from "@excalidraw/element";
 
 import type {
   ExcalidrawFrameLikeElement,
@@ -44,17 +49,82 @@ const titleCollator = new Intl.Collator(undefined, {
   sensitivity: "base",
 });
 
+/** `customData` key of a frame's position in the slides, set by
+ * reordering them */
+const SLIDE_ORDER_KEY = "presentationOrder";
+
+/** a frame's position in the slides, if they were reordered */
+const getSlideOrder = (frame: ExcalidrawFrameLikeElement) => {
+  const order = frame.customData?.[SLIDE_ORDER_KEY];
+  return typeof order === "number" ? order : null;
+};
+
+/** whether the slides were reordered (vs. sorted by title) */
+export const hasCustomSlideOrder = (
+  frames: readonly ExcalidrawFrameLikeElement[],
+) => frames.some((frame) => getSlideOrder(frame) !== null);
+
 /**
- * the frames of the scene in presentation order: by title, alphabetically
- * and numerically ("Slide 2" before "Slide 10"), keeping the scene order for
- * frames with the same title
+ * the frames of the scene in presentation order: the order they were put in
+ * (stored on the frames, so it travels with the drawing), then the frames
+ * that weren't (e.g. added since) by title, alphabetically and numerically
+ * ("Slide 2" before "Slide 10"), keeping the scene order for frames with the
+ * same title
  */
 export const getPresentationFrames = (
   frames: readonly NonDeleted<ExcalidrawFrameLikeElement>[],
 ) =>
-  [...frames].sort((a, b) =>
-    titleCollator.compare(getFrameLikeTitle(a), getFrameLikeTitle(b)),
-  );
+  [...frames].sort((a, b) => {
+    const orderA = getSlideOrder(a);
+    const orderB = getSlideOrder(b);
+    if (orderA !== null || orderB !== null) {
+      return (orderA ?? Infinity) - (orderB ?? Infinity) || 0;
+    }
+    return titleCollator.compare(getFrameLikeTitle(a), getFrameLikeTitle(b));
+  });
+
+/**
+ * stores the order of the slides on their frames (`null`: back to sorting
+ * them by title), as an undoable change of the scene
+ */
+export const setSlideOrder = (
+  app: AppClassProperties,
+  frameIds: readonly string[] | null,
+) => {
+  const positions = new Map(frameIds?.map((id, index) => [id, index]));
+  app.syncActionResult({
+    elements: app.scene.getElementsIncludingDeleted().map((element) => {
+      if (!isFrameLikeElement(element)) {
+        return element;
+      }
+      const { [SLIDE_ORDER_KEY]: current, ...customData } =
+        element.customData ?? {};
+      const order = positions.get(element.id) ?? null;
+      if ((current ?? null) === order) {
+        return element;
+      }
+      return newElementWith(element, {
+        customData:
+          order === null
+            ? customData
+            : { ...customData, [SLIDE_ORDER_KEY]: order },
+      });
+    }),
+    captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+  });
+};
+
+/** the editor whose "Organizar slides" dialog is open */
+export const slidesDialogAtom = atom<{ appId: string } | null>(null);
+
+export const openSlidesDialog = (app: AppClassProperties) => {
+  app.setAppState({ openMenu: null, openPopup: null });
+  app.updateEditorAtom(slidesDialogAtom, { appId: app.id });
+};
+
+export const closeSlidesDialog = (app: AppClassProperties) => {
+  app.updateEditorAtom(slidesDialogAtom, null);
+};
 
 /**
  * the slide a presentation starts on: the selected frame (or the frame of
@@ -151,7 +221,11 @@ export const goToSlide = (app: AppClassProperties, index: number) => {
   });
 };
 
-export const startPresentation = (app: AppClassProperties) => {
+export const startPresentation = (
+  app: AppClassProperties,
+  /** defaults to the current slide (see `getStartSlideIndex`) */
+  startAt?: number,
+) => {
   if (getPresentation(app)) {
     return;
   }
@@ -177,15 +251,17 @@ export const startPresentation = (app: AppClassProperties) => {
         : [];
     },
   );
-  const startIndex = getStartSlideIndex(frames, {
-    selectedFrameIds,
-    viewport: {
-      x: -state.scrollX,
-      y: -state.scrollY,
-      width: state.width / state.zoom.value,
-      height: state.height / state.zoom.value,
-    },
-  });
+  const startIndex =
+    startAt ??
+    getStartSlideIndex(frames, {
+      selectedFrameIds,
+      viewport: {
+        x: -state.scrollX,
+        y: -state.scrollY,
+        width: state.width / state.zoom.value,
+        height: state.height / state.zoom.value,
+      },
+    });
 
   app.updateEditorAtom(presentationAtom, {
     appId: app.id,

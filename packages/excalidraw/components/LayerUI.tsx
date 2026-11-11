@@ -41,7 +41,11 @@ import Stack from "./Stack";
 import { UserList } from "./UserList";
 import { PenModeButton } from "./PenModeButton";
 import { Presentation } from "./Presentation/Presentation";
-import { presentationAtom } from "./Presentation/presentationState";
+import {
+  presentationAtom,
+  slidesDialogAtom,
+} from "./Presentation/presentationState";
+import { SlidesDialog } from "./Presentation/SlidesDialog";
 import Footer from "./footer/Footer";
 import { isSidebarDockedAtom } from "./Sidebar/Sidebar";
 import MainMenu from "./main-menu/MainMenu";
@@ -199,6 +203,7 @@ const LayerUI = ({
 
   const [eyeDropperState, setEyeDropperState] = useAtom(activeEyeDropperAtom);
   const presentation = useAtomValue(presentationAtom);
+  const slidesDialog = useAtomValue(slidesDialogAtom);
 
   const renderJSONExportDialog = () => {
     if (!UIOptions.canvasActions.export) {
@@ -585,6 +590,9 @@ const LayerUI = ({
         />
       )}
       <ActiveConfirmDialog />
+      {slidesDialog?.appId === app.id && (
+        <SlidesDialog app={app} elements={elements} />
+      )}
       {defaultUIEnabled && appState.openDialog?.name === "elementLinkSelector" && (
         <ElementLinkDialog
           sourceElementId={appState.openDialog.sourceElementId}
