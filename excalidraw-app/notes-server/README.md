@@ -85,7 +85,7 @@ A interface não recebe aviso de alterações feitas pela API:
 
 - **Galeria:** busca a lista ao ser aberta e depois de cada ação feita nela. Uma nota criada por fora só aparece depois de recarregar (`Cmd+R`) ou de abrir e fechar outra nota.
 - **Editor:** a cena fica em memória e ele não mostra um `PUT` externo. Mas o editor salva com `baseUpdatedAt`: na edição seguinte, o servidor recusa o salvamento e o editor avisa que a nota foi alterada em outro lugar, com as opções de recarregar, salvar as alterações dele como cópia ou gravar por cima. Para evitar esse aviso, prefira criar uma nota nova ou gravar em notas fechadas.
-- **Miniatura:** é gerada pelo editor ao salvar uma alteração. Só abrir a nota não salva nada, então uma nota criada pela API fica sem miniatura até a primeira edição, a menos que o `PUT` envie `thumbnail`.
+- **Miniatura:** é gerada pelo editor ao fechar uma nota que foi alterada (voltar para a galeria, botão voltar, fechar o app de macOS), e não a cada salvamento. Uma nota criada pela API fica sem miniatura até ser aberta, alterada e fechada no editor, a menos que o `PUT` envie `thumbnail`.
 
 ## Exemplo
 
