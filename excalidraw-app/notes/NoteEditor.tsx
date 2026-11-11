@@ -44,6 +44,9 @@ import type { Note } from "./notesApi";
 
 const SAVE_DEBOUNCE_MS = 800;
 const UNTITLED = "Sem título";
+/** the macOS app (Electron), where closing waits for pending saves without
+ * asking the user (see `desktop/src/main.mts`) */
+const IS_DESKTOP_APP = navigator.userAgent.includes("Electron");
 const THUMBNAIL_MAX_SIZE = 480;
 
 type SaveStatus = "saved" | "pending" | "saving" | "error" | "conflict";
@@ -94,6 +97,9 @@ const createThumbnailOrSkip = (snapshot: SceneSnapshot) =>
  * images the server doesn't have yet, and serializes saves (scene and title)
  * so they never overlap.
  *
+ * The thumbnail isn't part of these saves (it's costly to render for large
+ * drawings): it's rendered once, when the note is closed (`saveThumbnail`).
+ *
  * Each save is made on the version of the note last loaded or saved here:
  * when the note changed elsewhere since (another window, the API), the
  * server refuses it and saving stops (`conflict`) until it's resolved.
@@ -116,6 +122,9 @@ const useNoteSaver = (noteId: string) => {
     conflict: false,
     // the next save overwrites changes made elsewhere
     force: false,
+    // the saved scene changed since the thumbnail was last rendered
+    thumbnailStale: false,
+    thumbnailQueued: false,
     timer: 0,
     queue: Promise.resolve(),
   });
@@ -148,7 +157,6 @@ const useNoteSaver = (noteId: string) => {
             elements: snapshot.elements,
             appState: clearAppStateForLocalStorage(snapshot.appState),
             files: newFiles,
-            thumbnail: await createThumbnailOrSkip(snapshot),
           }),
           baseUpdatedAt:
             state.force || state.baseUpdatedAt === null
@@ -157,6 +165,9 @@ const useNoteSaver = (noteId: string) => {
         });
         state.force = false;
         state.baseUpdatedAt = note.updatedAt;
+        if (snapshot) {
+          state.thumbnailStale = true;
+        }
         Object.keys(newFiles).forEach((id) => state.savedFileIds.add(id));
         setStatus(
           state.pending || state.pendingTitle !== null ? "pending" : "saved",
@@ -192,6 +203,7 @@ const useNoteSaver = (noteId: string) => {
     state.latest = null;
     state.conflict = false;
     state.force = false;
+    state.thumbnailStale = false;
     setStatus("saved");
   }, []);
 
@@ -243,6 +255,47 @@ const useNoteSaver = (noteId: string) => {
     [save],
   );
 
+  /**
+   * renders and saves the thumbnail if the saved scene changed since it was
+   * last rendered (after the saves already queued)
+   */
+  const saveThumbnail = useCallback(() => {
+    const state = stateRef.current;
+    if (state.thumbnailQueued) {
+      return state.queue;
+    }
+    state.thumbnailQueued = true;
+    state.queue = state.queue.then(async () => {
+      try {
+        const scene = state.latest;
+        if (!state.thumbnailStale || state.conflict || !scene) {
+          return;
+        }
+        const thumbnail = await createThumbnailOrSkip(scene);
+        if (thumbnail === undefined) {
+          // failed to render: give up on it rather than retrying forever
+          state.thumbnailStale = false;
+          return;
+        }
+        const note = await notesApi.update(noteId, {
+          thumbnail,
+          baseUpdatedAt: state.baseUpdatedAt ?? undefined,
+        });
+        state.baseUpdatedAt = note.updatedAt;
+        // unless the scene changed (and was saved) meanwhile
+        state.thumbnailStale = state.latest !== scene;
+      } catch (error) {
+        // e.g. the note changed elsewhere: this thumbnail would be outdated.
+        // Not retried (closing the macOS app waits for it)
+        console.error("Failed to save the note thumbnail", error);
+        state.thumbnailStale = false;
+      } finally {
+        state.thumbnailQueued = false;
+      }
+    });
+    return state.queue;
+  }, [noteId]);
+
   /** saves the changes made here over the ones made elsewhere */
   const overwrite = useCallback(() => {
     const state = stateRef.current;
@@ -255,9 +308,18 @@ const useNoteSaver = (noteId: string) => {
     const state = stateRef.current;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       // (while in conflict, the editor saves the changes as a copy)
-      if ((state.pending || state.pendingTitle !== null) && !state.conflict) {
+      if (state.conflict) {
+        return;
+      }
+      const hasChanges = !!state.pending || state.pendingTitle !== null;
+      if (hasChanges || state.thumbnailStale) {
         save();
-        event.preventDefault();
+        saveThumbnail();
+        // unsaved changes: ask before leaving. A thumbnail alone isn't worth
+        // asking about, but the macOS app closes as soon as it's saved
+        if (hasChanges || IS_DESKTOP_APP) {
+          event.preventDefault();
+        }
       }
     };
     window.addEventListener("beforeunload", onBeforeUnload);
@@ -265,8 +327,9 @@ const useNoteSaver = (noteId: string) => {
       window.removeEventListener("beforeunload", onBeforeUnload);
       // e.g. browser back button: flush whatever is pending
       save();
+      saveThumbnail();
     };
-  }, [save]);
+  }, [save, saveThumbnail]);
 
   const isConflicted = useCallback(() => stateRef.current.conflict, []);
   /** the latest scene, if it changed since it was loaded */
@@ -278,6 +341,7 @@ const useNoteSaver = (noteId: string) => {
       onChange,
       onLoaded,
       flush: save,
+      saveThumbnail,
       saveTitle,
       overwrite,
       isConflicted,
@@ -288,6 +352,7 @@ const useNoteSaver = (noteId: string) => {
       onChange,
       onLoaded,
       save,
+      saveThumbnail,
       saveTitle,
       overwrite,
       isConflicted,
@@ -513,6 +578,7 @@ export const NoteEditor = ({
       );
     } else {
       await saver.flush();
+      await saver.saveThumbnail();
     }
     onClose();
   };
