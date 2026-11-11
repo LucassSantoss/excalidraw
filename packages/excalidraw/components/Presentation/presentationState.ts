@@ -1,4 +1,4 @@
-import { getFrameLikeTitle } from "@excalidraw/element";
+import { getFrameLikeTitle, isFrameLikeElement } from "@excalidraw/element";
 
 import type {
   ExcalidrawFrameLikeElement,
@@ -56,6 +56,63 @@ export const getPresentationFrames = (
     titleCollator.compare(getFrameLikeTitle(a), getFrameLikeTitle(b)),
   );
 
+/**
+ * the slide a presentation starts on: the selected frame (or the frame of
+ * the selected elements), else the frame taking up most of the screen (the
+ * one closest to its center if several do), else the first one
+ */
+export const getStartSlideIndex = (
+  frames: readonly NonDeleted<ExcalidrawFrameLikeElement>[],
+  {
+    selectedFrameIds,
+    viewport,
+  }: {
+    /** frames of the selected elements, in selection order */
+    selectedFrameIds: readonly string[];
+    /** the visible part of the scene */
+    viewport: { x: number; y: number; width: number; height: number };
+  },
+) => {
+  for (const frameId of selectedFrameIds) {
+    const index = frames.findIndex((frame) => frame.id === frameId);
+    if (index !== -1) {
+      return index;
+    }
+  }
+  const viewportCenterX = viewport.x + viewport.width / 2;
+  const viewportCenterY = viewport.y + viewport.height / 2;
+  let bestIndex = 0;
+  let bestArea = 0;
+  let bestDistance = Infinity;
+  frames.forEach((frame, index) => {
+    const overlapWidth =
+      Math.min(frame.x + frame.width, viewport.x + viewport.width) -
+      Math.max(frame.x, viewport.x);
+    const overlapHeight =
+      Math.min(frame.y + frame.height, viewport.y + viewport.height) -
+      Math.max(frame.y, viewport.y);
+    const area = Math.max(0, overlapWidth) * Math.max(0, overlapHeight);
+    if (!area) {
+      return;
+    }
+    // among frames as much in view (e.g. all of them, zoomed out), the one
+    // closest to the center of the screen
+    const distance = Math.hypot(
+      frame.x + frame.width / 2 - viewportCenterX,
+      frame.y + frame.height / 2 - viewportCenterY,
+    );
+    if (
+      area > bestArea + 1 ||
+      (Math.abs(area - bestArea) <= 1 && distance < bestDistance)
+    ) {
+      bestArea = area;
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+  return bestIndex;
+};
+
 export const getPresentation = (app: AppClassProperties) => {
   const presentation = editorJotaiStore.get(presentationAtom);
   return presentation?.appId === app.id ? presentation : null;
@@ -107,10 +164,33 @@ export const startPresentation = (app: AppClassProperties) => {
   }
 
   const { state } = app;
+  const selectedFrameIds = Object.keys(state.selectedElementIds).flatMap(
+    (id) => {
+      const element = app.scene.getNonDeletedElement(id);
+      if (!element) {
+        return [];
+      }
+      return isFrameLikeElement(element)
+        ? [element.id]
+        : element.frameId
+        ? [element.frameId]
+        : [];
+    },
+  );
+  const startIndex = getStartSlideIndex(frames, {
+    selectedFrameIds,
+    viewport: {
+      x: -state.scrollX,
+      y: -state.scrollY,
+      width: state.width / state.zoom.value,
+      height: state.height / state.zoom.value,
+    },
+  });
+
   app.updateEditorAtom(presentationAtom, {
     appId: app.id,
     frameIds: frames.map((frame) => frame.id),
-    index: 0,
+    index: startIndex,
     restore: {
       viewModeEnabled: state.viewModeEnabled,
       frameRendering: state.frameRendering,
@@ -151,7 +231,7 @@ export const startPresentation = (app: AppClassProperties) => {
       // not allowed (e.g. no user gesture): present in the window
       .catch(() => {});
   }
-  goToSlide(app, 0);
+  goToSlide(app, startIndex);
 };
 
 export const stopPresentation = (app: AppClassProperties) => {

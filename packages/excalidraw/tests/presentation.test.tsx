@@ -6,6 +6,7 @@ import { Excalidraw } from "../index";
 import { editorJotaiStore } from "../editor-jotai";
 import {
   getPresentationFrames,
+  getStartSlideIndex,
   presentationAtom,
   startPresentation,
 } from "../components/Presentation/presentationState";
@@ -56,6 +57,50 @@ describe("getPresentationFrames", () => {
   });
 });
 
+describe("getStartSlideIndex", () => {
+  const frames = [
+    createFrame("A", 0),
+    createFrame("B", 200),
+    createFrame("C", 400),
+  ];
+  const offscreen = { x: 5000, y: 5000, width: 100, height: 100 };
+
+  it("starts on the frame of the selection", () => {
+    expect(
+      getStartSlideIndex(frames, {
+        selectedFrameIds: ["missing", frames[2].id],
+        viewport: { x: 0, y: 0, width: 100, height: 100 },
+      }),
+    ).toBe(2);
+  });
+
+  it("else on the frame taking up most of the screen", () => {
+    expect(
+      getStartSlideIndex(frames, {
+        selectedFrameIds: [],
+        // mostly over B, a bit over C
+        viewport: { x: 220, y: 0, width: 250, height: 80 },
+      }),
+    ).toBe(1);
+  });
+
+  it("among frames as much in view, on the one closest to the center", () => {
+    expect(
+      getStartSlideIndex(frames, {
+        selectedFrameIds: [],
+        // all three fully in view, centered on C
+        viewport: { x: -200, y: -500, width: 1300, height: 1000 },
+      }),
+    ).toBe(2);
+  });
+
+  it("else on the first frame", () => {
+    expect(
+      getStartSlideIndex(frames, { selectedFrameIds: [], viewport: offscreen }),
+    ).toBe(0);
+  });
+});
+
 describe("presentation", () => {
   beforeEach(async () => {
     mockBoundingClientRect();
@@ -92,6 +137,8 @@ describe("presentation", () => {
     const first = createFrame("1", 200);
     const second = createFrame("2", 400);
     API.setElements([third, first, second]);
+    // no frame in view: starts on the first one
+    API.setAppState({ scrollX: -5000, scrollY: -5000 });
 
     act(() => startPresentation(h.app));
     expect(currentFrameId()).toBe(first.id);
@@ -162,5 +209,51 @@ describe("presentation", () => {
     expect(h.state.toast?.message).toBe(
       "Add frames to the drawing to present them",
     );
+  });
+});
+
+describe("presentation: starting slide", () => {
+  beforeEach(async () => {
+    mockBoundingClientRect();
+    await render(<Excalidraw handleKeyboardGlobally={true} />);
+    await waitFor(() => expect(h.state.width).toBe(200));
+  });
+
+  afterEach(() => {
+    act(() => editorJotaiStore.set(presentationAtom, null));
+    restoreOriginalGetBoundingClientRect();
+  });
+
+  it("starts on the selected frame, or the frame of the selection", () => {
+    const first = createFrame("1", 0);
+    const second = createFrame("2", 2000);
+    const inSecond = API.createElement({
+      type: "rectangle",
+      x: 2010,
+      y: 10,
+      width: 20,
+      height: 20,
+      frameId: second.id,
+    });
+    API.setElements([first, second, inSecond]);
+
+    API.setSelectedElements([second]);
+    act(() => startPresentation(h.app));
+    expect(currentFrameId()).toBe(second.id);
+    Keyboard.keyPress(KEYS.ESCAPE);
+
+    API.setSelectedElements([inSecond]);
+    act(() => startPresentation(h.app));
+    expect(currentFrameId()).toBe(second.id);
+  });
+
+  it("starts on the frame in view", () => {
+    const first = createFrame("1", 0);
+    const second = createFrame("2", 2000);
+    API.setElements([first, second]);
+    API.setAppState({ scrollX: -1990, scrollY: 0 });
+
+    act(() => startPresentation(h.app));
+    expect(currentFrameId()).toBe(second.id);
   });
 });
