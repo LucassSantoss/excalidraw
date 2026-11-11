@@ -10,8 +10,8 @@ import Sitemap from "vite-plugin-sitemap";
 import { woff2BrowserPlugin } from "../scripts/woff2/woff2-vite-plugins";
 
 import { MERMAID_CHUNKS_LIST_NAME } from "./data/cacheMermaidChunks";
-import { createNotesApi } from "./notes-server/notesApi.mts";
 
+import type { createNotesApi } from "./notes-server/notesApi.mts";
 import type { Plugin, Rollup } from "vite";
 
 /**
@@ -136,17 +136,23 @@ const lazyChunksPlugin = (
   },
 });
 
-/** Serves the SQLite-backed notes API (`/api/notes`) from the Vite servers. */
+/**
+ * Serves the SQLite-backed notes API (`/api/notes`) from the Vite servers.
+ * Loaded when serving only: builds don't need it (nor `node:sqlite`).
+ */
 const notesApiPlugin = (dbFile: string): Plugin => {
-  let notesApi: ReturnType<typeof createNotesApi> | null = null;
-  const getNotesApi = () => (notesApi ??= createNotesApi(dbFile));
+  let notesApi: Promise<ReturnType<typeof createNotesApi>> | null = null;
+  const getNotesApi = () =>
+    (notesApi ??= import("./notes-server/notesApi.mts").then((module) =>
+      module.createNotesApi(dbFile),
+    ));
   return {
     name: "excalidraw-notes-api",
-    configureServer(server) {
-      server.middlewares.use(getNotesApi());
+    async configureServer(server) {
+      server.middlewares.use(await getNotesApi());
     },
-    configurePreviewServer(server) {
-      server.middlewares.use(getNotesApi());
+    async configurePreviewServer(server) {
+      server.middlewares.use(await getNotesApi());
     },
   };
 };
