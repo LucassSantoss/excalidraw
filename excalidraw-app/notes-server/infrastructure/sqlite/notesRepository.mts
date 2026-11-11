@@ -1,3 +1,5 @@
+import { extractNoteText } from "../../domain/search.mts";
+
 import type { DatabaseSync } from "node:sqlite";
 
 import type { NotesRepository } from "../../application/ports.mts";
@@ -65,8 +67,9 @@ export const createNotesRepository = (db: DatabaseSync): NotesRepository => {
      FROM notes WHERE id = ?`,
   );
   const copyThumbnailStale = db.prepare(
-    `UPDATE notes SET thumbnail_stale =
-       (SELECT thumbnail_stale FROM notes WHERE id = ?)
+    `UPDATE notes SET
+       (thumbnail_stale, content_text) =
+       (SELECT thumbnail_stale, content_text FROM notes WHERE id = ?)
      WHERE id = ?`,
   );
   const copyFiles = db.prepare(
@@ -86,6 +89,9 @@ export const createNotesRepository = (db: DatabaseSync): NotesRepository => {
   );
   const deleteNote = db.prepare(`DELETE FROM notes WHERE id = ?`);
   const findThumbnail = db.prepare(`SELECT thumbnail FROM notes WHERE id = ?`);
+  const listSearchable = db.prepare(
+    `SELECT ${SUMMARY_COLUMNS}, content_text FROM notes`,
+  );
   const saveThumbnail = db.prepare(
     `UPDATE notes SET thumbnail = ?, thumbnail_stale = 0,
        thumbnail_version = thumbnail_version + 1
@@ -139,6 +145,10 @@ export const createNotesRepository = (db: DatabaseSync): NotesRepository => {
             : (value as string | Uint8Array | null),
         );
       }
+      if (fields.elements !== undefined) {
+        assignments.push("content_text = ?");
+        values.push(extractNoteText(fields.elements));
+      }
       // the thumbnail is up to date when sent, outdated when the scene
       // changes without one
       if (fields.thumbnail !== undefined) {
@@ -175,6 +185,13 @@ export const createNotesRepository = (db: DatabaseSync): NotesRepository => {
     saveThumbnail: (id, thumbnail) => {
       saveThumbnail.run(thumbnail, id);
     },
+    listSearchable: () =>
+      (listSearchable.all() as (NoteRow & { content_text: string })[]).map(
+        (row) => ({
+          note: toNoteSummary(row),
+          contentText: row.content_text,
+        }),
+      ),
     findThumbnail: (id) =>
       (findThumbnail.get(id) as { thumbnail: Uint8Array | null } | undefined)
         ?.thumbnail ?? null,

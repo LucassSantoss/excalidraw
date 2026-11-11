@@ -25,6 +25,13 @@ export type NoteSummary = {
   thumbnailVersion: number;
 };
 
+export type SearchResult = NoteSummary & {
+  /** where the query was found (`null`: no query, most recent notes) */
+  matchedIn: "title" | "content" | null;
+  /** an excerpt of the drawing's text around the match */
+  snippet: string | null;
+};
+
 export type Folder = {
   id: string;
   name: string;
@@ -86,6 +93,12 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
 
 export const notesApi = {
   list: () => request<NoteSummary[]>("/notes"),
+  /** every note, by title and by the text written in its drawing */
+  search: (query: string, init?: RequestInit) =>
+    request<SearchResult[]>(
+      `/notes/search?q=${encodeURIComponent(query)}`,
+      init,
+    ),
   get: (id: string) => request<Note>(`/notes/${id}`),
   create: (title = "", folderId: string | null = null) =>
     request<NoteSummary>("/notes", {

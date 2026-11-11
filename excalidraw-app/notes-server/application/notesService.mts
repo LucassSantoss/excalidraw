@@ -15,6 +15,7 @@ import {
   parseNoteIds,
   parseThumbnail,
 } from "../domain/notes.mts";
+import { searchNotes } from "../domain/search.mts";
 
 import type { FoldersService } from "./foldersService.mts";
 import type {
@@ -23,6 +24,8 @@ import type {
   RunInTransaction,
 } from "./ports.mts";
 import type { NoteUpdate } from "../domain/notes.mts";
+
+const SEARCH_RESULTS_LIMIT = 30;
 
 export const createNotesService = ({
   notes,
@@ -182,6 +185,13 @@ export const createNotesService = ({
 
   return {
     list: () => notes.list(),
+    /** by title and by the text written in the drawings (see `searchNotes`) */
+    search: (query: unknown) =>
+      searchNotes(
+        notes.listSearchable(),
+        typeof query === "string" ? query : "",
+        SEARCH_RESULTS_LIMIT,
+      ),
     saveThumbnail,
     load: (id: string) => {
       const note = notes.findWithScene(id);

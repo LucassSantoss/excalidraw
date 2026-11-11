@@ -298,6 +298,51 @@
     }
   }
 
+  // in the search field: opens the search across titles and drawings
+  &__quick-search {
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+
+    kbd {
+      display: inline-block;
+      padding: 0.05rem 0.4rem;
+      border: 1px solid var(--notes-border);
+      border-radius: 0.3rem;
+      color: var(--notes-text-muted);
+      font: inherit;
+      font-size: 0.75rem;
+      white-space: nowrap;
+    }
+
+    span {
+      display: none;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      background: var(--notes-drop-bg);
+      color: var(--notes-primary);
+      font-size: 0.8rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    &:hover kbd {
+      border-color: var(--notes-primary);
+      color: var(--notes-primary);
+    }
+
+    @media (hover: none) {
+      kbd {
+        display: none;
+      }
+
+      span {
+        display: inline-block;
+      }
+    }
+  }
+
   &__create {
     display: inline-flex;
     align-items: center;
