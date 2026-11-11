@@ -767,6 +767,8 @@
     "moveUp": "Mover para cima",
     "moveDown": "Mover para baixo",
     "alphabeticalOrder": "Voltar à ordem alfabética",
-    "present": "Apresentar"
+    "present": "Apresentar",
+    "exportPdf": "Exportar PDF",
+    "pdfError": "Não foi possível exportar o PDF"
   }
 }
