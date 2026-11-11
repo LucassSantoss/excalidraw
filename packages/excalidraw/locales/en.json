@@ -797,6 +797,8 @@
     "moveUp": "Move up",
     "moveDown": "Move down",
     "alphabeticalOrder": "Back to alphabetical order",
-    "present": "Present"
+    "present": "Present",
+    "exportPdf": "Export PDF",
+    "pdfError": "Couldn't export the PDF"
   }
 }

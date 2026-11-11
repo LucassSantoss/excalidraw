@@ -22,6 +22,7 @@ import {
   setSlideOrder,
   startPresentation,
 } from "./presentationState";
+import { downloadBlob, exportSlidesToPdf } from "./slidesPdf";
 
 import "./SlidesDialog.scss";
 
@@ -120,6 +121,27 @@ export const SlidesDialog = ({
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
   const close = () => closeSlidesDialog(app);
+
+  const [pdfStatus, setPdfStatus] = useState<null | "loading">(null);
+  const exportPdf = async () => {
+    setPdfStatus("loading");
+    try {
+      const pdf = await exportSlidesToPdf(app, frames);
+      // characters file names can't have (macOS, Windows)
+      const name = (app.getName() || "slides").replace(/[\\/:*?"<>|]+/g, "-");
+      downloadBlob(pdf, `${name}.pdf`, app.ownerDocument);
+    } catch (error: any) {
+      console.error("Failed to export the slides", error);
+      app.setAppState({
+        toast: {
+          message: `${t("presentation.pdfError")}: ${error.message}`,
+          closable: true,
+        },
+      });
+    } finally {
+      setPdfStatus(null);
+    }
+  };
 
   const move = (fromIndex: number, toIndex: number) => {
     if (toIndex < 0 || toIndex > frames.length - 1 || fromIndex === toIndex) {
@@ -242,6 +264,12 @@ export const SlidesDialog = ({
               label={t("presentation.alphabeticalOrder")}
               onClick={() => setSlideOrder(app, null)}
               disabled={!hasCustomSlideOrder(frames)}
+            />
+            <FilledButton
+              variant="outlined"
+              label={t("presentation.exportPdf")}
+              status={pdfStatus}
+              onClick={exportPdf}
             />
             <FilledButton
               label={t("presentation.present")}
