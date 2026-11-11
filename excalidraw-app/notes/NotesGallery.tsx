@@ -31,6 +31,8 @@ const UNTITLED = "Sem título";
 const NOTE_DRAG_TYPE = "application/x-excalidraw-note";
 /** drop target key of the root ("Minhas notas") */
 const ROOT_DROP_TARGET = "root";
+/** minimum time between two refreshes triggered by returning to the gallery */
+const REFRESH_ON_FOCUS_INTERVAL_MS = 1000;
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
   dateStyle: "short",
@@ -220,6 +222,34 @@ export const NotesGallery = ({
 
   useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  // notes may change elsewhere (the API, another window): refresh when the
+  // gallery comes back into view. `focus` and `visibilitychange` often fire
+  // together, so one refresh at a time, at most once a second
+  useEffect(() => {
+    let inFlight = false;
+    let lastRefresh = Date.now();
+    const refreshOnReturn = () => {
+      if (
+        document.visibilityState !== "visible" ||
+        inFlight ||
+        Date.now() - lastRefresh < REFRESH_ON_FOCUS_INTERVAL_MS
+      ) {
+        return;
+      }
+      inFlight = true;
+      lastRefresh = Date.now();
+      refresh().finally(() => {
+        inFlight = false;
+      });
+    };
+    window.addEventListener("focus", refreshOnReturn);
+    document.addEventListener("visibilitychange", refreshOnReturn);
+    return () => {
+      window.removeEventListener("focus", refreshOnReturn);
+      document.removeEventListener("visibilitychange", refreshOnReturn);
+    };
   }, [refresh]);
 
   // a folder that no longer exists (e.g. deleted) falls back to the root
