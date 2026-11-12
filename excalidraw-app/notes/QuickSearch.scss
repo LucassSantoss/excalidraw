@@ -4,6 +4,7 @@
   --qs-text: #1b1b1f;
   --qs-text-muted: #6b6b76;
   --qs-active: rgba(105, 101, 219, 0.12);
+  --qs-accent: #5b57d1;
   --qs-thumbnail-bg: #ffffff;
 
   position: fixed;
@@ -22,6 +23,7 @@
     --qs-text: #e3e3e8;
     --qs-text-muted: #9a9aa5;
     --qs-active: rgba(168, 165, 255, 0.18);
+    --qs-accent: #a8a5ff;
     --qs-thumbnail-bg: #f1f1f4;
   }
 
@@ -128,6 +130,13 @@
     border-radius: 0.375rem;
     background: var(--qs-thumbnail-bg);
 
+    // today's note, not created yet
+    > svg {
+      width: 1.35rem;
+      height: 1.35rem;
+      color: var(--qs-text-muted);
+    }
+
     img {
       max-width: 100%;
       max-height: 100%;
@@ -136,6 +145,7 @@
   }
 
   &__text {
+    flex: 1;
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -168,6 +178,16 @@
       width: 0.85rem;
       height: 0.85rem;
     }
+  }
+
+  &__badge {
+    flex-shrink: 0;
+    padding: 0.1rem 0.5rem;
+    border-radius: 1rem;
+    background: var(--qs-active);
+    color: var(--qs-accent);
+    font-size: 0.75rem;
+    font-weight: 600;
   }
 
   &__empty {

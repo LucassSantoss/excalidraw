@@ -368,6 +368,25 @@ describe("notes API: daily notes", () => {
     expect(other.body.folderId).toBe(first.body.folderId);
   });
 
+  it("finds the note of a day without creating it", async () => {
+    expect(
+      await request("GET", "/api/notes/daily?date=2026-03-04"),
+    ).toMatchObject({ status: 200, body: null });
+    expect((await request("GET", "/api/notes")).body).toEqual([]);
+
+    const created = await request("POST", "/api/notes/daily", {
+      date: "2026-03-04",
+      title: "Quarta",
+    });
+    const found = await request("GET", "/api/notes/daily?date=2026-03-04");
+    expect(found.body).toEqual(created.body);
+
+    expect(await request("GET", "/api/notes/daily?date=hoje")).toMatchObject({
+      status: 400,
+      body: { error: "date must be YYYY-MM-DD" },
+    });
+  });
+
   it("validates the date", async () => {
     for (const date of [undefined, "2026-3-4", "hoje", 20260304]) {
       expect(await request("POST", "/api/notes/daily", { date })).toMatchObject(

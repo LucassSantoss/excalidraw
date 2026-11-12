@@ -16,6 +16,10 @@ export const createNotesRoutes =
       const query = new URL(req.url ?? "/", "http://localhost").searchParams;
       return sendJSON(res, 200, notes.search(query.get("q")));
     }
+    if (id === "daily" && !action && method === "GET") {
+      const query = new URL(req.url ?? "/", "http://localhost").searchParams;
+      return sendJSON(res, 200, notes.findDaily(query.get("date")));
+    }
     if (id === "daily" && !action && method === "POST") {
       const body = await readJSONBody(req);
       return sendJSON(res, 200, notes.getOrCreateDaily(body.date, body.title));

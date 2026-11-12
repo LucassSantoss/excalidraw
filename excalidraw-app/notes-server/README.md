@@ -32,6 +32,7 @@ Não há autenticação: por padrão o servidor só aceita conexões da própria
 | POST | `/api/notes` | `{ title?, folderId? }` | 201, resumo da nota vazia |
 | DELETE | `/api/notes` | `{ ids: string[] }` | `{ deleted }`; apaga todas ou nenhuma |
 | GET | `/api/notes/search?q=` |  | até 30 resumos com `matchedIn` (`title`, `content` ou `null`) e `snippet`; sem `q`, as notas mais recentes |
+| GET | `/api/notes/daily?date=YYYY-MM-DD` |  | resumo da nota do dia, ou `null` se ainda não existe |
 | POST | `/api/notes/daily` | `{ date: "YYYY-MM-DD", title? }` | resumo da nota do dia, criada se preciso |
 | GET | `/api/notes/:id` |  | resumo com `elements`, `appState` e `files` |
 | PUT | `/api/notes/:id` | `{ title?, folderId?, elements?, appState?, files?, thumbnail?, baseUpdatedAt? }` | resumo atualizado; 409 se a nota mudou desde `baseUpdatedAt` |
