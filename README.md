@@ -88,7 +88,7 @@ O fork mexe em alguns arquivos do editor (`packages/excalidraw/`), e é neles qu
 
 ## Integração contínua
 
-Os workflows do GitHub Actions rodam no Node 24, porque o Node 20 não tem `node:sqlite`. Os títulos de PR seguem o padrão do oficial, com tipo e escopo, por exemplo `feat(app): …`, `fix(editor): …` ou `ci(repo): …`.
+Os workflows do GitHub Actions rodam no Node 24, porque o Node 20 não tem `node:sqlite`. O workflow **Stats** envia medições ao painel do Excalidraw+ e precisa de um segredo que só o repositório oficial tem, então só roda lá: no fork, os jobs aparecem como pulados (`if: github.repository == 'excalidraw/excalidraw'` em `stats.yml`; mantenha essa linha ao atualizar com o oficial). Os títulos de PR seguem o padrão do oficial, com tipo e escopo, por exemplo `feat(app): …`, `fix(editor): …` ou `ci(repo): …`.
 
 ---
 

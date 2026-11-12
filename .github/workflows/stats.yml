@@ -6,6 +6,7 @@ name: Stats
 # Performance pages (scripts/stats/). No run cancels another, so commits merged
 # close together are all measured.
 # OSS_STATS_TOKEN lives in the `stats` environment, which only master can use.
+# Forks don't have it: there, both jobs are skipped.
 
 on:
   push:
@@ -18,6 +19,7 @@ permissions:
 jobs:
   bundle:
     name: Bundle size
+    if: github.repository == 'excalidraw/excalidraw'
     runs-on: ubuntu-latest
     environment: stats
     steps:
@@ -40,6 +42,7 @@ jobs:
 
   perf:
     name: Performance
+    if: github.repository == 'excalidraw/excalidraw'
     # a fixed image, so the runs stay comparable; Playwright 1.58 can't install
     # its browser on ubuntu-latest's 26.04 either
     runs-on: ubuntu-24.04
