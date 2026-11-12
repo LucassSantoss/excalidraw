@@ -1,9 +1,10 @@
 import { isDarwin } from "@excalidraw/common";
 import { searchIcon } from "@excalidraw/excalidraw/components/icons";
 import clsx from "clsx";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
-import { folderIcon } from "./icons";
+import { getDailyNoteTitle, isTodayQuery, toISODate } from "./dailyNotes";
+import { calendarIcon, folderIcon } from "./icons";
 import { foldersApi, notesApi } from "./notesApi";
 
 import "./QuickSearch.scss";
@@ -12,6 +13,15 @@ import type { NoteSummary, SearchResult } from "./notesApi";
 
 const UNTITLED = "Sem título";
 const SEARCH_DEBOUNCE_MS = 120;
+
+/** a row of the list: today's note (found by "hoje" or "today", offered for
+ * creation if missing) or a note found by the search */
+type Item =
+  | { type: "today"; date: Date; note: NoteSummary | null }
+  | { type: "result"; result: SearchResult };
+
+const getItemKey = (item: Item) =>
+  item.type === "today" ? "today" : item.result.id;
 
 /** the shortcut opening the quick search: Cmd+O on macOS, Ctrl+O elsewhere */
 export const QUICK_SEARCH_SHORTCUT = isDarwin ? "⌘O" : "Ctrl+O";
@@ -36,7 +46,7 @@ export const QuickSearch = ({
   onClose: () => void;
 }) => {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[] | null>(null);
+  const [items, setItems] = useState<Item[] | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [folderNames, setFolderNames] = useState<Map<string, string>>(
     () => new Map(),
@@ -57,16 +67,28 @@ export const QuickSearch = ({
   useEffect(() => {
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      notesApi
-        .search(query, { signal: controller.signal })
-        .then((results) => {
-          setResults(results);
+      const date = new Date();
+      Promise.all([
+        notesApi.search(query, { signal: controller.signal }),
+        isTodayQuery(query)
+          ? notesApi
+              .findDaily(toISODate(date), { signal: controller.signal })
+              .then((note) => ({ date, note }))
+          : null,
+      ])
+        .then(([results, today]) => {
+          setItems([
+            ...(today ? [{ type: "today" as const, ...today }] : []),
+            ...results
+              .filter((result) => result.id !== today?.note?.id)
+              .map((result): Item => ({ type: "result", result })),
+          ]);
           setActiveIndex(0);
         })
         .catch((error) => {
           if (error.name !== "AbortError") {
             console.error("Failed to search notes", error);
-            setResults([]);
+            setItems([]);
           }
         });
     }, SEARCH_DEBOUNCE_MS);
@@ -83,12 +105,32 @@ export const QuickSearch = ({
       ?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
-  const open = (note: NoteSummary | undefined) => {
-    if (note) {
-      onClose();
-      onOpenNote(note);
+  const openNote = (note: NoteSummary) => {
+    onClose();
+    onOpenNote(note);
+  };
+
+  const [isCreatingDaily, setIsCreatingDaily] = useState(false);
+
+  const open = (item: Item | undefined) => {
+    if (item?.type === "result") {
+      openNote(item.result);
+    } else if (item?.note) {
+      openNote(item.note);
+    } else if (item && !isCreatingDaily) {
+      // a daily note like the gallery's "Nota de hoje": in "Notas Diárias"
+      setIsCreatingDaily(true);
+      notesApi
+        .daily(toISODate(item.date), getDailyNoteTitle(item.date))
+        .then(openNote)
+        .catch((error) => {
+          console.error("Failed to create today's note", error);
+          setIsCreatingDaily(false);
+        });
     }
   };
+
+  const hasToday = items?.[0]?.type === "today";
 
   const describe = useMemo(
     () => (result: SearchResult) =>
@@ -126,20 +168,20 @@ export const QuickSearch = ({
             placeholder="Buscar notas por título ou conteúdo"
             aria-label="Buscar notas por título ou conteúdo"
             role="combobox"
-            aria-expanded={!!results?.length}
+            aria-expanded={!!items?.length}
             aria-controls="quick-search-results"
             aria-activedescendant={
-              results?.length ? `quick-search-result-${activeIndex}` : undefined
+              items?.length ? `quick-search-result-${activeIndex}` : undefined
             }
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
-              const count = results?.length ?? 0;
+              const count = items?.length ?? 0;
               if (event.key === "ArrowDown" && count) {
                 setActiveIndex((index) => (index + 1) % count);
               } else if (event.key === "ArrowUp" && count) {
                 setActiveIndex((index) => (index - 1 + count) % count);
               } else if (event.key === "Enter") {
-                open(results?.[activeIndex]);
+                open(items?.[activeIndex]);
               } else if (event.key === "Escape") {
                 onClose();
               } else {
@@ -153,7 +195,7 @@ export const QuickSearch = ({
           <kbd className="quick-search__kbd">esc</kbd>
         </label>
 
-        {results && !results.length ? (
+        {items && !items.length ? (
           <p className="quick-search__empty">
             {query.trim()
               ? `Nenhuma nota encontrada para "${query.trim()}".`
@@ -167,48 +209,45 @@ export const QuickSearch = ({
             role="listbox"
             aria-label={query.trim() ? "Resultados" : "Notas recentes"}
           >
-            {!query.trim() && !!results?.length && (
+            {hasToday && (
               <li className="quick-search__section" role="presentation">
-                Recentes
+                Nota diária
               </li>
             )}
-            {results?.map((result, index) => (
-              <li
-                key={result.id}
-                id={`quick-search-result-${index}`}
-                data-index={index}
-                role="option"
-                aria-selected={index === activeIndex}
-                className={clsx("quick-search__result", {
-                  "quick-search__result--active": index === activeIndex,
-                })}
-                onPointerMove={() => setActiveIndex(index)}
-                onClick={() => open(result)}
-              >
-                <span className="quick-search__thumbnail">
-                  {result.hasThumbnail && (
-                    <img
-                      src={notesApi.thumbnailURL(result)}
-                      alt=""
-                      loading="lazy"
-                      draggable={false}
+            {items?.map((item, index) => (
+              <Fragment key={getItemKey(item)}>
+                {item.type === "result" &&
+                  (!query.trim() || hasToday) &&
+                  (index === 0 || items[index - 1].type === "today") && (
+                    <li className="quick-search__section" role="presentation">
+                      {query.trim() ? "Notas" : "Recentes"}
+                    </li>
+                  )}
+                <li
+                  id={`quick-search-result-${index}`}
+                  data-index={index}
+                  role="option"
+                  aria-selected={index === activeIndex}
+                  className={clsx("quick-search__result", {
+                    "quick-search__result--active": index === activeIndex,
+                  })}
+                  onPointerMove={() => setActiveIndex(index)}
+                  onClick={() => open(item)}
+                >
+                  {item.type === "today" ? (
+                    <TodayRow
+                      date={item.date}
+                      note={item.note}
+                      isCreating={isCreatingDaily}
+                    />
+                  ) : (
+                    <ResultRow
+                      result={item.result}
+                      detail={describe(item.result)}
                     />
                   )}
-                </span>
-                <span className="quick-search__text">
-                  <span
-                    className={clsx("quick-search__title", {
-                      "quick-search__title--untitled": !result.title,
-                    })}
-                  >
-                    {result.title || UNTITLED}
-                  </span>
-                  <span className="quick-search__detail">
-                    {result.matchedIn !== "content" && folderIcon}
-                    {describe(result)}
-                  </span>
-                </span>
-              </li>
+                </li>
+              </Fragment>
             ))}
           </ul>
         )}
@@ -229,3 +268,72 @@ export const QuickSearch = ({
     </div>
   );
 };
+
+const Thumbnail = ({ note }: { note: NoteSummary | null }) => (
+  <span className="quick-search__thumbnail">
+    {note?.hasThumbnail ? (
+      <img
+        src={notesApi.thumbnailURL(note)}
+        alt=""
+        loading="lazy"
+        draggable={false}
+      />
+    ) : (
+      !note && calendarIcon
+    )}
+  </span>
+);
+
+const ResultRow = ({
+  result,
+  detail,
+}: {
+  result: SearchResult;
+  detail: string;
+}) => (
+  <>
+    <Thumbnail note={result} />
+    <span className="quick-search__text">
+      <span
+        className={clsx("quick-search__title", {
+          "quick-search__title--untitled": !result.title,
+        })}
+      >
+        {result.title || UNTITLED}
+      </span>
+      <span className="quick-search__detail">
+        {result.matchedIn !== "content" && folderIcon}
+        {detail}
+      </span>
+    </span>
+  </>
+);
+
+/** today's note, or the option to create it when missing */
+const TodayRow = ({
+  date,
+  note,
+  isCreating,
+}: {
+  date: Date;
+  note: NoteSummary | null;
+  isCreating: boolean;
+}) => (
+  <>
+    <Thumbnail note={note} />
+    <span className="quick-search__text">
+      <span className="quick-search__title">
+        {note
+          ? note.title || UNTITLED
+          : isCreating
+          ? "Criando a nota de hoje…"
+          : "Criar a nota de hoje"}
+      </span>
+      <span className="quick-search__detail">
+        {calendarIcon}
+        {note ? "Nota de hoje · Notas Diárias" : getDailyNoteTitle(date)}
+      </span>
+    </span>
+    {!note && <span className="quick-search__badge">Nova</span>}
+  </>
+);

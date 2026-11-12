@@ -3,9 +3,9 @@
 Fork do [Excalidraw](https://github.com/excalidraw/excalidraw) com uma **galeria de notas salva em SQLite** e um **app nativo para macOS**. Tudo roda localmente, sem conta, nuvem ou plano pago.
 
 - **Galeria de notas**: cria, busca, renomeia, duplica e exclui notas, com miniatura de cada desenho. Marque várias notas (Shift+clique seleciona um intervalo) para excluí-las de uma vez. A galeria se atualiza sozinha ao voltar para a janela
-- **Busca rápida** (`Cmd+O` no macOS, `Ctrl+O` nos outros sistemas, ou o botão de busca): procura em todas as notas, pelo título e pelo texto escrito nos desenhos, sem diferenciar maiúsculas nem acentos
+- **Busca rápida** (`Cmd+O` no macOS, `Ctrl+O` nos outros sistemas, ou o botão de busca): procura em todas as notas, pelo título e pelo texto escrito nos desenhos, sem diferenciar maiúsculas nem acentos. Digite "hoje" ou "today" para abrir a nota do dia, ou criá-la se ainda não existir
 - **Pastas**: crie pastas e arraste as notas para dentro delas. Para tirar uma nota da pasta, arraste até "Minhas notas". Excluir uma pasta não apaga as notas; elas voltam para a raiz
-- **Nota diária**: o botão "Nota de hoje" cria (ou reabre) a nota do dia, com um título como "Sexta-feira, 23 de outubro de 2026", na pasta fixa **Notas Diárias**. Essa pasta só aceita notas diárias; as outras notas ficam nas demais pastas
+- **Nota diária**: o botão "Nota de hoje" (ou "hoje" na busca rápida) cria (ou reabre) a nota do dia, com um título como "Sexta-feira, 23 de outubro de 2026", na pasta fixa **Notas Diárias**. Essa pasta só aceita notas diárias; as outras notas ficam nas demais pastas
 - **Salvamento automático** no SQLite enquanto você desenha, incluindo imagens coladas. Se a mesma nota for alterada em outro lugar (outra janela ou a API), o editor avisa e oferece recarregar, salvar como cópia ou manter a sua versão
 - **Apresentação** (menu `⋯` da barra de ferramentas): mostra os frames do desenho como slides, em tela cheia, a partir do slide em que você está. Em **Organizar slides**, arraste os slides para mudar a ordem ou exporte tudo como PDF
 - **Cores padrão**: clique com o botão direito numa cor da faixa do seletor de cores e escolha **Definir como cor padrão**; ela vale para as notas novas

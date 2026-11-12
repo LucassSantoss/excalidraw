@@ -20,6 +20,7 @@ import {
 } from "./icons";
 import { foldersApi, notesApi } from "./notesApi";
 import { usePromptDialog } from "./PromptDialog";
+import { getDailyNoteTitle, toISODate } from "./dailyNotes";
 import { QUICK_SEARCH_SHORTCUT } from "./QuickSearch";
 import { renderThumbnail } from "./thumbnail";
 
@@ -40,27 +41,6 @@ const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
   dateStyle: "short",
   timeStyle: "short",
 });
-
-const dailyTitleFormatter = new Intl.DateTimeFormat("pt-BR", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
-
-/** local YYYY-MM-DD (identifies the daily note of that day) */
-const toISODate = (date: Date) =>
-  [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-");
-
-/** e.g. "Sexta-feira, 23 de outubro de 2026" */
-const getDailyNoteTitle = (date: Date) => {
-  const title = dailyTitleFormatter.format(date);
-  return title.charAt(0).toUpperCase() + title.slice(1);
-};
 
 const pluralizeNotes = (count: number) =>
   `${count} ${count === 1 ? "nota" : "notas"}`;

@@ -105,6 +105,12 @@ export const notesApi = {
       method: "POST",
       body: JSON.stringify({ title, folderId }),
     }),
+  /** the note of the given day, or `null` if it wasn't created yet */
+  findDaily: (date: string, init?: RequestInit) =>
+    request<NoteSummary | null>(
+      `/notes/daily?date=${encodeURIComponent(date)}`,
+      init,
+    ),
   /** gets the note of the given day, creating it in "Notas Diárias" if needed */
   daily: (date: string, title: string) =>
     request<NoteSummary>("/notes/daily", {

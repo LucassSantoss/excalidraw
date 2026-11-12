@@ -74,6 +74,12 @@ export const createNotesService = ({
     return find(id);
   };
 
+  /** the note of the given day, or `null` if it wasn't created yet */
+  const findDaily = (dateInput: unknown) => {
+    const noteId = notes.findIdByDailyDate(parseDailyDate(dateInput));
+    return noteId ? find(noteId) : null;
+  };
+
   /** the note of the given day, created in the daily notes folder if needed */
   const getOrCreateDaily = (dateInput: unknown, title: unknown) => {
     const date = parseDailyDate(dateInput);
@@ -201,6 +207,7 @@ export const createNotesService = ({
       return note;
     },
     create,
+    findDaily,
     getOrCreateDaily,
     duplicate,
     update,
