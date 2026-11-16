@@ -499,13 +499,17 @@
     border: none;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.9);
-    color: #8e8e99;
     opacity: 0;
     transition: opacity 0.15s, transform 0.15s;
 
     svg {
       width: 1.25rem;
       height: 1.25rem;
+    }
+
+    // the gray of the checkbox's border (beats `.notes-gallery button`)
+    &:not([aria-pressed="true"]) {
+      color: #b5b5bf;
     }
 
     &:hover {
