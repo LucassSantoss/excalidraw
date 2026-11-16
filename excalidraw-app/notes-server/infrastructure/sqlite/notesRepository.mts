@@ -10,6 +10,7 @@ type NoteRow = {
   title: string;
   folder_id: string | null;
   daily_date: string | null;
+  is_favorite: number;
   created_at: number;
   updated_at: number;
   has_thumbnail: number;
@@ -21,7 +22,8 @@ type NoteSceneRow = NoteRow & { elements: string; app_state: string };
 
 type FileRow = { id: string; data: string };
 
-const SUMMARY_COLUMNS = `id, title, folder_id, daily_date, created_at, updated_at,
+const SUMMARY_COLUMNS = `id, title, folder_id, daily_date, is_favorite,
+  created_at, updated_at,
   thumbnail IS NOT NULL AS has_thumbnail, thumbnail_stale, thumbnail_version`;
 
 const toNoteSummary = (row: NoteRow): NoteSummary => ({
@@ -29,6 +31,7 @@ const toNoteSummary = (row: NoteRow): NoteSummary => ({
   title: row.title,
   folderId: row.folder_id,
   isDaily: !!row.daily_date,
+  isFavorite: !!row.is_favorite,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
   hasThumbnail: !!row.has_thumbnail,
@@ -77,6 +80,9 @@ export const createNotesRepository = (db: DatabaseSync): NotesRepository => {
      SELECT ?, id, data FROM note_files WHERE note_id = ?`,
   );
   const move = db.prepare(`UPDATE notes SET folder_id = ? WHERE id = ?`);
+  const setFavorite = db.prepare(
+    `UPDATE notes SET is_favorite = ? WHERE id = ?`,
+  );
   const findFiles = db.prepare(
     `SELECT id, data FROM note_files WHERE note_id = ?`,
   );
@@ -166,6 +172,9 @@ export const createNotesRepository = (db: DatabaseSync): NotesRepository => {
     },
     move: (id, folderId) => {
       move.run(folderId, id);
+    },
+    setFavorite: (id, isFavorite) => {
+      setFavorite.run(isFavorite ? 1 : 0, id);
     },
     addFiles: (id, files) => {
       for (const file of files) {

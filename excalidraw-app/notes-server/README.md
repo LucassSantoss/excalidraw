@@ -35,13 +35,13 @@ Não há autenticação: por padrão o servidor só aceita conexões da própria
 | GET | `/api/notes/daily?date=YYYY-MM-DD` |  | resumo da nota do dia, ou `null` se ainda não existe |
 | POST | `/api/notes/daily` | `{ date: "YYYY-MM-DD", title? }` | resumo da nota do dia, criada se preciso |
 | GET | `/api/notes/:id` |  | resumo com `elements`, `appState` e `files` |
-| PUT | `/api/notes/:id` | `{ title?, folderId?, elements?, appState?, files?, thumbnail?, baseUpdatedAt? }` | resumo atualizado; 409 se a nota mudou desde `baseUpdatedAt` |
+| PUT | `/api/notes/:id` | `{ title?, folderId?, isFavorite?, elements?, appState?, files?, thumbnail?, baseUpdatedAt? }` | resumo atualizado; 409 se a nota mudou desde `baseUpdatedAt` |
 | DELETE | `/api/notes/:id` |  | 204 |
 | POST | `/api/notes/:id/duplicate` |  | 201, resumo da cópia |
 | GET | `/api/notes/:id/thumbnail` |  | PNG, ou 404 se não houver |
 | PUT | `/api/notes/:id/thumbnail` | `{ thumbnail, baseUpdatedAt? }` | resumo; grava só a miniatura, sem alterar `updatedAt` |
 
-Os resumos trazem `hasThumbnail`, `needsThumbnail` (a cena mudou sem miniatura nova, como num `PUT` de `elements` sem `thumbnail`) e `thumbnailVersion` (aumenta a cada miniatura salva; a interface usa na URL da imagem).
+Os resumos trazem `isFavorite` (marcada com a estrela na galeria), `hasThumbnail`, `needsThumbnail` (a cena mudou sem miniatura nova, como num `PUT` de `elements` sem `thumbnail`) e `thumbnailVersion` (aumenta a cada miniatura salva; a interface usa na URL da imagem).
 
 A busca procura cada palavra de `q` no título e nos textos do desenho (textos e nomes de frames, sem os apagados), sem diferenciar maiúsculas nem acentos. Os títulos que contêm `q` vêm primeiro, depois os que contêm todas as palavras, depois as notas encontradas pelo conteúdo, e dentro de cada grupo as mais recentes.
 
@@ -52,6 +52,7 @@ No `PUT`:
 - `files` só precisa trazer imagens novas. Um `id` que já existe na nota é ignorado.
 - `thumbnail` é um data URL PNG, ou `null` para limpar.
 - `folderId` move a nota e não altera `updatedAt`.
+- `isFavorite` (`true` ou `false`) marca ou desmarca a nota como favorita e também não altera `updatedAt`.
 - `baseUpdatedAt` é o `updatedAt` da versão em que as mudanças foram feitas. Se a nota mudou desde então, o `PUT` é recusado com 409 (`note was changed elsewhere`) e nada é gravado. Sem ele, o `PUT` sempre grava.
 
 ### Pastas, biblioteca e cores
@@ -64,7 +65,9 @@ No `PUT`:
 | GET | `/api/color-defaults` |  |
 | PUT | `/api/color-defaults/:slot` | `{ defaults: (string \| null)[] }` |
 
-A pasta de notas diárias (`kind: "daily"`) só aceita notas diárias e não pode ser renomeada nem apagada. Apagar uma pasta devolve as notas dela à raiz.
+A pasta de notas diárias (`kind: "daily"`) só aceita notas diárias e não pode ser renomeada nem apagada. Ela continua no banco quando fica vazia; só a galeria deixa de mostrá-la. Apagar uma pasta devolve as notas dela à raiz.
+
+A pasta **Favoritas** não existe no banco nem em `/api/folders`: a galeria lista nela as notas com `isFavorite` de todas as pastas, e a mostra só enquanto houver alguma.
 
 ## Organização do código
 

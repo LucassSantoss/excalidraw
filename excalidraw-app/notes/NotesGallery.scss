@@ -9,6 +9,9 @@
   --notes-danger: #db6965;
   --notes-thumbnail-bg: #ffffff;
   --notes-drop-bg: rgba(105, 101, 219, 0.1);
+  --notes-star: #f59f00;
+  --notes-star-fill: #fcc419;
+  --notes-star-bg: rgba(252, 196, 25, 0.16);
 
   box-sizing: border-box;
   height: 100%;
@@ -70,6 +73,12 @@
         width: 1.5rem;
         height: 1.5rem;
         color: var(--notes-primary);
+      }
+
+      // "Favoritas": the star in yellow, filled
+      &.notes-gallery__favorites-title svg {
+        color: var(--notes-star);
+        fill: var(--notes-star-fill);
       }
     }
 
@@ -472,6 +481,64 @@
     &[aria-checked="true"] {
       border-color: var(--notes-primary);
       background: var(--notes-primary);
+    }
+  }
+
+  // top right, opposite the checkbox: shown on hover, always once starred
+  &__favorite {
+    position: absolute;
+    top: 0.375rem;
+    right: 0.375rem;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
+    color: #8e8e99;
+    opacity: 0;
+    transition: opacity 0.15s, transform 0.15s;
+
+    svg {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+
+    &:hover {
+      color: var(--notes-star);
+      transform: scale(1.1);
+    }
+
+    &:focus-visible,
+    .notes-gallery__card:hover & {
+      opacity: 1;
+    }
+
+    @media (hover: none) {
+      opacity: 1;
+    }
+
+    &[aria-pressed="true"] {
+      color: var(--notes-star);
+      opacity: 1;
+
+      svg {
+        fill: var(--notes-star-fill);
+      }
+    }
+  }
+
+  // "Favoritas": the star in yellow, filled
+  &__folder-icon--favorites {
+    background: var(--notes-star-bg);
+    color: var(--notes-star);
+
+    svg {
+      fill: var(--notes-star-fill);
     }
   }
 

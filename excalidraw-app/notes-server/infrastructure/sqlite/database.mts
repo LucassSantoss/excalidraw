@@ -104,6 +104,11 @@ export const openDatabase = (dbFile: string) => {
     db.exec(`ALTER TABLE notes ADD COLUMN thumbnail_version INTEGER NOT NULL
       DEFAULT 0`);
   }
+  if (!noteColumns.has("is_favorite")) {
+    // 1 for notes starred in the gallery
+    db.exec(`ALTER TABLE notes ADD COLUMN is_favorite INTEGER NOT NULL
+      DEFAULT 0`);
+  }
   db.exec(`
     CREATE INDEX IF NOT EXISTS notes_folder_id ON notes (folder_id);
     CREATE UNIQUE INDEX IF NOT EXISTS notes_daily_date ON notes (daily_date)

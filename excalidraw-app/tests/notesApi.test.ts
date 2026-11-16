@@ -141,6 +141,7 @@ describe("notes API: notes", () => {
       title: "First",
       folderId: null,
       isDaily: false,
+      isFavorite: false,
       createdAt: expect.any(Number),
       updatedAt: created.body.createdAt,
       hasThumbnail: false,
@@ -288,6 +289,49 @@ describe("notes API: notes", () => {
     expect(
       await request("PUT", `/api/notes/${note.id}`, { folderId: "missing" }),
     ).toMatchObject({ status: 400, body: { error: "folder not found" } });
+  });
+
+  it("stars and unstars notes without bumping updatedAt", async () => {
+    const note = await createNote({ title: "Plan" });
+    await tick();
+
+    const starred = await request("PUT", `/api/notes/${note.id}`, {
+      isFavorite: true,
+    });
+    expect(starred.body).toMatchObject({
+      isFavorite: true,
+      updatedAt: note.updatedAt,
+    });
+    expect((await request("GET", "/api/notes")).body[0].isFavorite).toBe(true);
+    expect(
+      (await request("GET", `/api/notes/search?q=plan`)).body[0].isFavorite,
+    ).toBe(true);
+
+    // the editor can keep saving with the version it loaded
+    expect(
+      (
+        await request("PUT", `/api/notes/${note.id}`, {
+          title: "Plano",
+          baseUpdatedAt: note.updatedAt,
+        })
+      ).status,
+    ).toBe(200);
+
+    // a copy isn't starred
+    const copy = await request("POST", `/api/notes/${note.id}/duplicate`);
+    expect(copy.body.isFavorite).toBe(false);
+
+    const unstarred = await request("PUT", `/api/notes/${note.id}`, {
+      isFavorite: false,
+    });
+    expect(unstarred.body.isFavorite).toBe(false);
+
+    expect(
+      await request("PUT", `/api/notes/${note.id}`, { isFavorite: "yes" }),
+    ).toMatchObject({
+      status: 400,
+      body: { error: "isFavorite must be a boolean" },
+    });
   });
 
   it("deletes a note", async () => {
@@ -670,6 +714,7 @@ describe("notes API: database", () => {
         title: "Old note",
         folderId: null,
         isDaily: false,
+        isFavorite: false,
         createdAt: 1,
         updatedAt: 1,
         hasThumbnail: false,

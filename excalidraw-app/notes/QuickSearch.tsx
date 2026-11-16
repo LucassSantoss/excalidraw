@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import { getDailyNoteTitle, isTodayQuery, toISODate } from "./dailyNotes";
-import { calendarIcon, folderIcon } from "./icons";
+import { calendarIcon, folderIcon, starIcon } from "./icons";
 import { foldersApi, notesApi } from "./notesApi";
 
 import "./QuickSearch.scss";
@@ -300,6 +300,11 @@ const ResultRow = ({
         })}
       >
         {result.title || UNTITLED}
+        {result.isFavorite && (
+          <span className="quick-search__favorite" title="Favorita">
+            {starIcon}
+          </span>
+        )}
       </span>
       <span className="quick-search__detail">
         {result.matchedIn !== "content" && folderIcon}

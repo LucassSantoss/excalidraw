@@ -12,6 +12,7 @@ import {
   getDailyNoteTitle,
   getReferencedFileIds,
   parseDailyDate,
+  parseIsFavorite,
   parseNoteIds,
   parseThumbnail,
 } from "../domain/notes.mts";
@@ -126,6 +127,10 @@ export const createNotesService = ({
       update.folderId !== undefined
         ? parseFolderId(update.folderId, note.isDaily)
         : undefined;
+    const isFavorite =
+      update.isFavorite !== undefined
+        ? parseIsFavorite(update.isFavorite)
+        : undefined;
 
     const fields: Parameters<NotesRepository["update"]>[1] = {};
     if (typeof update.title === "string") {
@@ -144,6 +149,9 @@ export const createNotesService = ({
     transaction(() => {
       if (folderId !== undefined) {
         notes.move(id, folderId);
+      }
+      if (isFavorite !== undefined) {
+        notes.setFavorite(id, isFavorite);
       }
       if (Object.keys(fields).length) {
         notes.update(id, fields, Date.now());
