@@ -15,6 +15,8 @@ export type NoteSummary = {
   folderId: string | null;
   /** created by "Nota de hoje"; the only notes allowed in "Notas Diárias" */
   isDaily: boolean;
+  /** starred: listed first, and in the gallery's "Favoritas" folder */
+  isFavorite: boolean;
   createdAt: number;
   updatedAt: number;
   hasThumbnail: boolean;
@@ -35,8 +37,11 @@ export type SearchResult = NoteSummary & {
 export type Folder = {
   id: string;
   name: string;
-  /** set for app-managed folders (can't be renamed or deleted) */
-  kind: "daily" | null;
+  /**
+   * set for app-managed folders (can't be renamed or deleted). "favorites"
+   * isn't stored: the gallery lists the starred notes from every folder in it
+   */
+  kind: "daily" | "favorites" | null;
   createdAt: number;
   noteCount: number;
 };
@@ -139,6 +144,12 @@ export const notesApi = {
     request<NoteSummary>(`/notes/${id}`, {
       method: "PUT",
       body: JSON.stringify({ folderId }),
+    }),
+  /** stars or unstars a note, without bumping `updatedAt` */
+  setFavorite: (id: string, isFavorite: boolean) =>
+    request<NoteSummary>(`/notes/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ isFavorite }),
     }),
   remove: (id: string) => request<void>(`/notes/${id}`, { method: "DELETE" }),
   /** deletes all the given notes, or none if one doesn't exist */

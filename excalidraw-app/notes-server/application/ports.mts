@@ -40,6 +40,8 @@ export interface NotesRepository {
   ): void;
   /** doesn't bump `updatedAt` */
   move(id: string, folderId: string | null): void;
+  /** doesn't bump `updatedAt` */
+  setFavorite(id: string, isFavorite: boolean): void;
   /** files the note already has are kept as they are */
   addFiles(id: string, files: NoteFile[]): void;
   removeFilesExcept(id: string, keptFileIds: Set<unknown>): void;

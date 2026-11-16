@@ -17,6 +17,7 @@ import {
   chevronRightIcon,
   folderIcon,
   folderPlusIcon,
+  starIcon,
 } from "./icons";
 import { foldersApi, notesApi } from "./notesApi";
 import { usePromptDialog } from "./PromptDialog";
@@ -48,9 +49,24 @@ const pluralizeNotes = (count: number) =>
 const isNoteDrag = (event: React.DragEvent) =>
   event.dataTransfer.types.includes(NOTE_DRAG_TYPE);
 
-/** the daily notes folder only holds daily notes */
+/** id (in the URL) of the folder listing the starred notes of every folder */
+const FAVORITES_FOLDER_ID = "favoritas";
+
+/** the daily notes folder only holds daily notes; dropping a note on
+ * "Favoritas" stars it */
 const canMoveNoteTo = (note: NoteSummary, folder: Folder | null) =>
   folder?.kind !== "daily" || note.isDaily;
+
+const getFolderIcon = (folder: Folder) =>
+  folder.kind === "daily"
+    ? calendarIcon
+    : folder.kind === "favorites"
+    ? starIcon
+    : folderIcon;
+
+/** starred notes first; otherwise keeps the order (most recent first) */
+const sortFavoritesFirst = (notes: NoteSummary[]) =>
+  [...notes].sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite));
 
 /**
  * Renders, in the background and one at a time, the thumbnails notes need:
@@ -105,6 +121,7 @@ const NoteCard = ({
   isSelected,
   isSelecting,
   onToggleSelected,
+  onToggleFavorite,
   onOpen,
   onRename,
   onDuplicate,
@@ -121,6 +138,7 @@ const NoteCard = ({
   isSelecting: boolean;
   /** shift-click selects the range from the last (de)selected note */
   onToggleSelected: (event: React.MouseEvent) => void;
+  onToggleFavorite: () => void;
   onOpen: () => void;
   onRename: () => void;
   onDuplicate: () => void;
@@ -133,6 +151,7 @@ const NoteCard = ({
       "notes-gallery__card--dragging": isDragging,
       "notes-gallery__card--selected": isSelected,
       "notes-gallery__card--selecting": isSelecting,
+      "notes-gallery__card--favorite": note.isFavorite,
     })}
     draggable
     onDragStart={(event) => {
@@ -152,6 +171,16 @@ const NoteCard = ({
       aria-label={`Selecionar ${note.title || UNTITLED}`}
     >
       {isSelected && checkIcon}
+    </button>
+    <button
+      type="button"
+      className="notes-gallery__favorite"
+      aria-pressed={note.isFavorite}
+      onClick={onToggleFavorite}
+      title={note.isFavorite ? "Remover das favoritas" : "Favoritar"}
+      aria-label={`Favoritar ${note.title || UNTITLED}`}
+    >
+      {starIcon}
     </button>
     <button
       type="button"
@@ -296,9 +325,37 @@ export const NotesGallery = ({
     };
   }, [refresh]);
 
-  // a folder that no longer exists (e.g. deleted) falls back to the root
-  const currentFolder = folders.find((folder) => folder.id === folderId);
+  const favoritesFolder = useMemo<Folder>(
+    () => ({
+      id: FAVORITES_FOLDER_ID,
+      name: "Favoritas",
+      kind: "favorites",
+      createdAt: 0,
+      noteCount: notes?.filter((note) => note.isFavorite).length ?? 0,
+    }),
+    [notes],
+  );
+
+  // the folders shown: "Favoritas" and "Notas Diárias" only while they hold
+  // notes (they come back with the first favorite or daily note)
+  const galleryFolders = useMemo(
+    () => [
+      ...(favoritesFolder.noteCount ? [favoritesFolder] : []),
+      ...folders.filter(
+        (folder) => folder.kind !== "daily" || folder.noteCount,
+      ),
+    ],
+    [favoritesFolder, folders],
+  );
+
+  // a folder that no longer exists (e.g. deleted) falls back to the root. An
+  // app-managed folder left empty stays open until leaving it
+  const currentFolder =
+    folderId === FAVORITES_FOLDER_ID
+      ? favoritesFolder
+      : folders.find((folder) => folder.id === folderId);
   const currentFolderId = currentFolder?.id ?? null;
+  const isFavoritesView = currentFolder?.kind === "favorites";
 
   // the selection belongs to the folder being browsed
   useEffect(() => {
@@ -357,6 +414,18 @@ export const NotesGallery = ({
 
   const moveNote = (noteId: string, targetFolderId: string | null) => {
     const note = notes?.find((note) => note.id === noteId);
+    if (note && targetFolderId === FAVORITES_FOLDER_ID) {
+      if (!note.isFavorite) {
+        setFavorite(note, true);
+      }
+      return;
+    }
+    // in "Favoritas", taking a note out (to "Minhas notas") unstars it: it
+    // stays in its own folder
+    if (note && isFavoritesView && targetFolderId === null) {
+      setFavorite(note, false);
+      return;
+    }
     const targetFolder =
       folders.find((folder) => folder.id === targetFolderId) ?? null;
     if (
@@ -374,6 +443,17 @@ export const NotesGallery = ({
         ) ?? null,
     );
     run(() => notesApi.move(noteId, targetFolderId));
+  };
+
+  const setFavorite = (note: NoteSummary, isFavorite: boolean) => {
+    // optimistic, so the star and the order change right away
+    setNotes(
+      (notes) =>
+        notes?.map((current) =>
+          current.id === note.id ? { ...current, isFavorite } : current,
+        ) ?? null,
+    );
+    run(() => notesApi.setFavorite(note.id, isFavorite));
   };
 
   const createFolder = async () => {
@@ -428,7 +508,7 @@ export const NotesGallery = ({
   const dropTargetProps = (targetFolderId: string | null) => {
     const key = targetFolderId ?? ROOT_DROP_TARGET;
     const targetFolder =
-      folders.find((folder) => folder.id === targetFolderId) ?? null;
+      galleryFolders.find((folder) => folder.id === targetFolderId) ?? null;
     return {
       onDragOver: (event: React.DragEvent) => {
         // not accepting the drop shows the "not allowed" cursor
@@ -466,13 +546,17 @@ export const NotesGallery = ({
 
   const visibleNotes = useMemo(
     () =>
-      (notes ?? []).filter((note) =>
-        isSearching
-          ? // search looks into every folder
-            (note.title || UNTITLED).toLowerCase().includes(normalizedQuery)
-          : note.folderId === currentFolderId,
+      sortFavoritesFirst(
+        (notes ?? []).filter((note) =>
+          isSearching
+            ? // search looks into every folder
+              (note.title || UNTITLED).toLowerCase().includes(normalizedQuery)
+            : isFavoritesView
+            ? note.isFavorite
+            : note.folderId === currentFolderId,
+        ),
       ),
-    [notes, isSearching, normalizedQuery, currentFolderId],
+    [notes, isSearching, normalizedQuery, isFavoritesView, currentFolderId],
   );
 
   // only the notes on screen count as selected (e.g. while searching)
@@ -546,8 +630,8 @@ export const NotesGallery = ({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isSelecting, dialog, clearSelection]);
 
-  const showFolders = !isSearching && !currentFolder && !!folders.length;
-  const isEmpty = notes && !notes.length && !folders.length;
+  const showFolders = !isSearching && !currentFolder && !!galleryFolders.length;
+  const isEmpty = notes && !notes.length && !galleryFolders.length;
 
   return (
     <div
@@ -567,14 +651,22 @@ export const NotesGallery = ({
                   dropTarget === ROOT_DROP_TARGET,
               })}
               onClick={() => onOpenFolder(null)}
-              title="Voltar para Minhas notas (solte uma nota aqui para tirá-la da pasta)"
+              title={
+                isFavoritesView
+                  ? "Voltar para Minhas notas (solte uma nota aqui para tirá-la das favoritas)"
+                  : "Voltar para Minhas notas (solte uma nota aqui para tirá-la da pasta)"
+              }
               {...dropTargetProps(null)}
             >
               Minhas notas
             </button>
             {chevronRightIcon}
-            <h1>
-              {currentFolder.kind === "daily" ? calendarIcon : folderIcon}
+            <h1
+              className={clsx({
+                "notes-gallery__favorites-title": isFavoritesView,
+              })}
+            >
+              {getFolderIcon(currentFolder)}
               {currentFolder.name}
             </h1>
             {!currentFolder.kind && (
@@ -638,7 +730,7 @@ export const NotesGallery = ({
             Nova pasta
           </button>
         )}
-        {currentFolder?.kind !== "daily" && (
+        {!currentFolder?.kind && (
           <button
             type="button"
             className="notes-gallery__create"
@@ -670,7 +762,7 @@ export const NotesGallery = ({
         <section>
           <h2 className="notes-gallery__section-title">Pastas</h2>
           <ul className="notes-gallery__folders">
-            {folders.map((folder) => (
+            {galleryFolders.map((folder) => (
               <li
                 key={folder.id}
                 className={clsx("notes-gallery__folder", {
@@ -682,6 +774,8 @@ export const NotesGallery = ({
                 title={
                   isDropDisabled(folder)
                     ? 'Só notas criadas por "Nota de hoje" ficam nesta pasta'
+                    : folder.kind === "favorites"
+                    ? "As notas marcadas com a estrela, de todas as pastas (solte uma nota aqui para favoritá-la)"
                     : undefined
                 }
                 {...dropTargetProps(folder.id)}
@@ -692,8 +786,13 @@ export const NotesGallery = ({
                   onClick={() => onOpenFolder(folder.id)}
                   aria-label={`Abrir pasta ${folder.name}`}
                 >
-                  <span className="notes-gallery__folder-icon">
-                    {folder.kind === "daily" ? calendarIcon : folderIcon}
+                  <span
+                    className={clsx("notes-gallery__folder-icon", {
+                      "notes-gallery__folder-icon--favorites":
+                        folder.kind === "favorites",
+                    })}
+                  >
+                    {getFolderIcon(folder)}
                   </span>
                   <span className="notes-gallery__meta">
                     <span className="notes-gallery__title" title={folder.name}>
@@ -742,6 +841,8 @@ export const NotesGallery = ({
         <p className="notes-gallery__empty">
           {currentFolder.kind === "daily"
             ? 'Use "Nota de hoje" para criar a nota do dia.'
+            : currentFolder.kind === "favorites"
+            ? "Nenhuma nota favorita. Marque a estrela de uma nota para encontrá-la aqui."
             : 'Pasta vazia. Crie uma nota aqui ou, em "Minhas notas", arraste notas até esta pasta.'}
         </p>
       )}
@@ -752,7 +853,7 @@ export const NotesGallery = ({
             key={note.id}
             note={note}
             folderName={
-              isSearching && note.folderId
+              (isSearching || isFavoritesView) && note.folderId
                 ? folderNames.get(note.folderId)
                 : undefined
             }
@@ -760,6 +861,7 @@ export const NotesGallery = ({
             isSelected={selectedIds.has(note.id)}
             isSelecting={isSelecting}
             onToggleSelected={(event) => toggleSelected(note, event)}
+            onToggleFavorite={() => setFavorite(note, !note.isFavorite)}
             onOpen={() => onOpenNote(note)}
             onRename={() => renameNote(note)}
             onDuplicate={() => run(() => notesApi.duplicate(note.id))}

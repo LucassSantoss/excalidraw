@@ -8,6 +8,8 @@ export type NoteSummary = {
   folderId: string | null;
   /** created by "Nota de hoje"; the only notes allowed in the daily folder */
   isDaily: boolean;
+  /** starred in the gallery: listed first, and in the "Favoritas" folder */
+  isFavorite: boolean;
   createdAt: number;
   updatedAt: number;
   hasThumbnail: boolean;
@@ -34,6 +36,8 @@ export type NoteUpdate = {
   title?: string;
   /** moves the note (`null`: out of any folder); doesn't bump `updatedAt` */
   folderId?: string | null;
+  /** stars or unstars the note; doesn't bump `updatedAt` */
+  isFavorite?: boolean;
   elements?: unknown[];
   appState?: Record<string, unknown>;
   /** only new images are stored; ids the note already has are ignored */
@@ -78,6 +82,13 @@ export const parseDailyDate = (date: unknown) => {
 /** a daily note is titled after its date unless a title is given */
 export const getDailyNoteTitle = (title: unknown, date: string) =>
   typeof title === "string" && title.trim() ? title.trim() : date;
+
+export const parseIsFavorite = (isFavorite: unknown) => {
+  if (typeof isFavorite !== "boolean") {
+    throw new InvalidInputError("isFavorite must be a boolean");
+  }
+  return isFavorite;
+};
 
 /** the distinct ids of the notes to delete at once */
 export const parseNoteIds = (ids: unknown) => {

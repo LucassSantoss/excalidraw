@@ -167,6 +167,15 @@
     }
   }
 
+  &__favorite svg {
+    width: 0.9rem;
+    height: 0.9rem;
+    margin-left: 0.35rem;
+    vertical-align: -0.1rem;
+    color: #f59f00;
+    fill: #fcc419;
+  }
+
   &__detail {
     display: flex;
     align-items: center;
