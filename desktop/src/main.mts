@@ -21,8 +21,13 @@ const HOST = "127.0.0.1";
 // fixed so the app origin (and with it localStorage: theme, language…) stays
 // the same across launches
 const PREFERRED_PORT = 43117;
+// how long the open note may take to save (scene and thumbnail) before its
+// window closes anyway
+const BEFORE_CLOSE_TIMEOUT_MS = 15000;
 // how long to wait for a pending autosave before retrying to close a window
 const UNLOAD_SAVE_GRACE_MS = 800;
+// after that many retries, the window closes even if the page still blocks it
+const MAX_UNLOAD_RETRIES = 10;
 
 const mainDir = path.dirname(fileURLToPath(import.meta.url));
 const buildDir = app.isPackaged
@@ -80,6 +85,41 @@ const createWindow = () => {
 
   window.once("ready-to-show", () => window.show());
 
+  // Before closing (Cmd+W, Cmd+Q…), the open note saves its changes and
+  // renders its thumbnail, while the page is still fully alive: once it
+  // starts unloading, the images of the scene no longer load and the
+  // thumbnail would never be rendered. `close` comes before `beforeunload`.
+  let isReadyToClose = false;
+  let isPreparingToClose = false;
+  window.on("close", (event) => {
+    if (isReadyToClose) {
+      return;
+    }
+    event.preventDefault();
+    if (isPreparingToClose) {
+      return;
+    }
+    isPreparingToClose = true;
+    const prepared = window.webContents
+      .executeJavaScript("window.excalidrawNotesBeforeClose?.()", true)
+      .catch((error) => console.error("failed to save before closing", error));
+    const timedOut = new Promise((resolve) =>
+      setTimeout(resolve, BEFORE_CLOSE_TIMEOUT_MS),
+    );
+    Promise.race([prepared, timedOut]).then(() => {
+      isPreparingToClose = false;
+      if (window.isDestroyed()) {
+        return;
+      }
+      isReadyToClose = true;
+      if (isQuitting) {
+        app.quit();
+      } else {
+        window.close();
+      }
+    });
+  });
+
   // links (e.g. on canvas elements, help dialog) open in the default browser
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (!isAppURL(url)) {
@@ -94,10 +134,21 @@ const createWindow = () => {
     }
   });
 
-  // The editor blocks unloading while a note has unsaved changes (and starts
-  // saving them). Browsers would show a confirm dialog; here we give the save
-  // a moment and close again, which goes through once nothing is pending.
-  window.webContents.on("will-prevent-unload", () => {
+  // The editor still blocks unloading if the note changed meanwhile (and
+  // starts saving it). Browsers would show a confirm dialog; here we give the
+  // save a moment and close again, which goes through once nothing is
+  // pending, or after a few tries whatever the page says.
+  let unloadRetries = 0;
+  window.webContents.on("will-prevent-unload", (event) => {
+    unloadRetries++;
+    if (unloadRetries > MAX_UNLOAD_RETRIES) {
+      console.warn("closing the window although the page blocks it");
+      // ignores the page's `beforeunload`
+      event.preventDefault();
+      return;
+    }
+    // the next try saves the note again before closing
+    isReadyToClose = false;
     setTimeout(() => {
       if (window.isDestroyed()) {
         return;
