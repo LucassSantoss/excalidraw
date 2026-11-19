@@ -43,7 +43,16 @@ export const createStaticServer = ({
 }) => {
   const serveStatic = (req: http.IncomingMessage, res: http.ServerResponse) => {
     const { pathname } = new URL(req.url ?? "/", "http://localhost");
-    let filePath = path.join(buildDir, decodeURIComponent(pathname));
+    let decodedPathname: string;
+    try {
+      decodedPathname = decodeURIComponent(pathname);
+    } catch {
+      // malformed escapes (e.g. `%E0`): thrown here, it would take the
+      // whole server (and the macOS app) down
+      res.statusCode = 400;
+      return res.end();
+    }
+    let filePath = path.join(buildDir, decodedPathname);
     if (!filePath.startsWith(buildDir)) {
       res.statusCode = 403;
       return res.end();
@@ -56,7 +65,15 @@ export const createStaticServer = ({
       "Content-Type",
       MIME_TYPES[path.extname(filePath)] ?? "application/octet-stream",
     );
-    fs.createReadStream(filePath).pipe(res);
+    fs.createReadStream(filePath)
+      // an unhandled stream error would crash the process
+      .on("error", () => {
+        if (!res.headersSent) {
+          res.statusCode = 500;
+        }
+        res.end();
+      })
+      .pipe(res);
   };
 
   return http.createServer((req, res) =>

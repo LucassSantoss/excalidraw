@@ -40,10 +40,24 @@ import "./NoteEditor.scss";
 import type { Note } from "./notesApi";
 
 const SAVE_DEBOUNCE_MS = 800;
+/**
+ * how long saving a note's thumbnail may take before giving up on it: closing
+ * the note (or the macOS app) waits for it. A skipped thumbnail is rendered
+ * later by the gallery (the server flags the note as needing one).
+ */
+const THUMBNAIL_TIMEOUT_MS = 8000;
 const UNTITLED = "Sem título";
 /** the macOS app (Electron), where closing waits for pending saves without
  * asking the user (see `desktop/src/main.mts`) */
 const IS_DESKTOP_APP = navigator.userAgent.includes("Electron");
+
+declare global {
+  interface Window {
+    /** saves the open note before the macOS app closes its window (see
+     * `desktop/src/main.mts`) */
+    excalidrawNotesBeforeClose?: () => Promise<void>;
+  }
+}
 
 type SaveStatus = "saved" | "pending" | "saving" | "error" | "conflict";
 
@@ -61,8 +75,17 @@ const SAVE_STATUS_LABELS: Record<SaveStatus, string> = {
   conflict: "Alterada em outro lugar",
 };
 
+/** `undefined`: failed, or took too long (see `THUMBNAIL_TIMEOUT_MS`) */
 const createThumbnailOrSkip = (snapshot: SceneSnapshot) =>
-  renderThumbnail(snapshot).catch((error) => {
+  Promise.race([
+    renderThumbnail(snapshot),
+    new Promise<never>((_, reject) =>
+      window.setTimeout(
+        () => reject(new Error("timed out rendering the thumbnail")),
+        THUMBNAIL_TIMEOUT_MS,
+      ),
+    ),
+  ]).catch((error) => {
     console.error("Failed to create note thumbnail", error);
     return undefined;
   });
@@ -550,15 +573,34 @@ export const NoteEditor = ({
     [isConflicted],
   );
 
-  const close = async () => {
-    if (saver.isConflicted()) {
+  /** saves everything before the note is closed */
+  const { flush, saveThumbnail } = saver;
+  const prepareToClose = useCallback(async () => {
+    if (isConflicted()) {
       await leaveWhileConflicted().catch((error) =>
         console.error("Failed to save the note as a copy", error),
       );
     } else {
-      await saver.flush();
-      await saver.saveThumbnail();
+      await flush();
+      await saveThumbnail();
     }
+  }, [isConflicted, leaveWhileConflicted, flush, saveThumbnail]);
+
+  // the macOS app calls it before closing its window, so that the window
+  // closes once the note is saved. Rendering the thumbnail once the page has
+  // started unloading (in `beforeunload`) never finishes in Chromium: the
+  // images of the scene don't load anymore.
+  useEffect(() => {
+    window.excalidrawNotesBeforeClose = prepareToClose;
+    return () => {
+      if (window.excalidrawNotesBeforeClose === prepareToClose) {
+        delete window.excalidrawNotesBeforeClose;
+      }
+    };
+  }, [prepareToClose]);
+
+  const close = async () => {
+    await prepareToClose();
     onClose();
   };
 
